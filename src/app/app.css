@@ -1,0 +1,5 @@
+/* App Shell — minimal wrapper, pages handle their own layout */
+:host {
+  display: block;
+  min-height: 100vh;
+}
