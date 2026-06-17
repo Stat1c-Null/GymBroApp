@@ -334,12 +334,19 @@ a:hover {
   font-size: 0.9rem;
   font-weight: 500;
   z-index: 10000;
-  transition: transform var(--transition-normal);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--transition-normal),
+    opacity var(--transition-normal),
+    visibility var(--transition-normal);
   max-width: 90vw;
 }
 
 .toast.visible {
   transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  visibility: visible;
 }
 
 .toast.error {
