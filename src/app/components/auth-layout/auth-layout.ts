@@ -1,10 +1,11 @@
 import { Component, input } from '@angular/core';
 import { BrandLogoComponent } from '../brand-logo/brand-logo';
+import { SettingsSidebarComponent } from '../settings-sidebar/settings-sidebar';
 
 @Component({
   selector: 'app-auth-layout',
   standalone: true,
-  imports: [BrandLogoComponent],
+  imports: [BrandLogoComponent, SettingsSidebarComponent],
   template: `
     <div class="auth-page">
       <div class="auth-bg">
@@ -25,6 +26,9 @@ import { BrandLogoComponent } from '../brand-logo/brand-logo';
         <ng-content />
       </div>
     </div>
+
+    <!-- Theme settings (auth pages only; app pages use the nav sidebar) -->
+    <app-settings-sidebar />
   `,
   styleUrl: './auth-layout.css',
 })

@@ -13,11 +13,37 @@ export const routes: Routes = [
       import('./pages/signup/signup').then((m) => m.SignupComponent),
   },
   {
-    path: 'dashboard',
+    path: '',
     loadComponent: () =>
-      import('./pages/dashboard/dashboard').then((m) => m.DashboardComponent),
+      import('./layout/shell/shell').then((m) => m.ShellComponent),
     canActivate: [authGuard],
+    children: [
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./pages/dashboard/dashboard').then(
+            (m) => m.DashboardComponent
+          ),
+      },
+      {
+        path: 'weeks',
+        loadComponent: () =>
+          import('./pages/weeks/weeks').then((m) => m.WeeksComponent),
+      },
+      {
+        path: 'workouts',
+        loadComponent: () =>
+          import('./pages/workouts/workouts').then((m) => m.WorkoutsComponent),
+      },
+      {
+        path: 'analytics',
+        loadComponent: () =>
+          import('./pages/analytics/analytics').then(
+            (m) => m.AnalyticsComponent
+          ),
+      },
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+    ],
   },
-  { path: '', redirectTo: 'login', pathMatch: 'full' },
-  { path: '**', redirectTo: 'login' },
+  { path: '**', redirectTo: 'dashboard' },
 ];

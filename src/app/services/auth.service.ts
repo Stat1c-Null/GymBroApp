@@ -1,4 +1,4 @@
-import { Injectable, inject, signal, OnDestroy } from '@angular/core';
+import { Injectable, inject, signal, computed, OnDestroy } from '@angular/core';
 import {
   Auth,
   createUserWithEmailAndPassword,
@@ -25,6 +25,12 @@ export class AuthService implements OnDestroy {
   private readonly unsubscribe: Unsubscribe;
 
   readonly currentUser = signal<User | null>(null);
+
+  /** Best available label for the signed-in user. */
+  readonly displayName = computed(() => {
+    const user = this.currentUser();
+    return user?.displayName || user?.email || 'Gym Bro';
+  });
 
   constructor() {
     this.unsubscribe = onAuthStateChanged(this.auth, (user) => {

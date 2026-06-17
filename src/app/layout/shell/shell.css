@@ -1,0 +1,72 @@
+:host {
+  display: block;
+}
+
+/* ---- Reopen / hamburger button ---- */
+.shell-hamburger {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 4000;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-md);
+}
+
+.shell-hamburger:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ---- Content area ---- */
+.shell-content {
+  min-height: 100vh;
+  padding: 2rem;
+  padding-left: calc(260px + 2rem); /* reserve space for the fixed sidebar */
+  transition: padding var(--transition-normal);
+}
+
+.shell-content.expanded {
+  padding-left: 2rem;
+  padding-top: 5rem; /* clear the floating hamburger */
+}
+
+/* ---- Backdrop (hidden on desktop) ---- */
+.shell-backdrop {
+  display: none;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 768px) {
+  .shell-content,
+  .shell-content.expanded {
+    padding-left: 2rem;
+    padding-top: 5rem;
+  }
+
+  .shell-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-bg);
+    backdrop-filter: blur(4px);
+    z-index: 4500;
+    animation: fadeIn 0.25s ease;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

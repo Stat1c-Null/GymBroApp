@@ -1,0 +1,21 @@
+<!-- Reopen button — shown whenever the sidebar is hidden -->
+@if (!open()) {
+  <button class="shell-hamburger" (click)="toggle()" aria-label="Open menu">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  </button>
+}
+
+<app-nav-sidebar [open]="open()" (close)="close()" />
+
+<!-- Backdrop (mobile only, via CSS) -->
+@if (open()) {
+  <div class="shell-backdrop" (click)="close()"></div>
+}
+
+<main class="shell-content" [class.expanded]="!open()">
+  <router-outlet />
+</main>

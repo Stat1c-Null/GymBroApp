@@ -1,14 +1,14 @@
-import { Component, inject, signal, HostListener } from '@angular/core';
-import { ThemeService } from '../../services/theme.service';
+import { Component, signal, HostListener } from '@angular/core';
+import { ThemeToggleComponent } from '../theme-toggle/theme-toggle';
 
 @Component({
   selector: 'app-settings-sidebar',
   standalone: true,
+  imports: [ThemeToggleComponent],
   templateUrl: './settings-sidebar.html',
   styleUrl: './settings-sidebar.css',
 })
 export class SettingsSidebarComponent {
-  protected readonly themeService = inject(ThemeService);
   protected readonly isOpen = signal(false);
 
   toggle(): void {
