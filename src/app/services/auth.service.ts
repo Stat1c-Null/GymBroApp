@@ -25,12 +25,10 @@ export class AuthService implements OnDestroy {
   private readonly unsubscribe: Unsubscribe;
 
   readonly currentUser = signal<User | null>(null);
-  readonly isLoading = signal<boolean>(true);
 
   constructor() {
     this.unsubscribe = onAuthStateChanged(this.auth, (user) => {
       this.currentUser.set(user);
-      this.isLoading.set(false);
     });
   }
 
@@ -50,8 +48,8 @@ export class AuthService implements OnDestroy {
         password
       );
       await updateProfile(credential.user, { displayName });
-      // Force signal refresh after profile update
-      this.currentUser.set({ ...credential.user });
+      // updateProfile doesn't trigger onAuthStateChanged, so refresh manually.
+      this.currentUser.set(this.auth.currentUser);
     } catch (error) {
       throw this.mapError(error);
     }

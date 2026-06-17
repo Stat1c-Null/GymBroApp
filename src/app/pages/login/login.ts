@@ -1,18 +1,29 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { AuthService } from '../../services/auth.service';
+import { AuthService, AuthError } from '../../services/auth.service';
+import { ToastService } from '../../services/toast.service';
+import { AuthLayoutComponent } from '../../components/auth-layout/auth-layout';
+import { PasswordInputComponent } from '../../components/password-input/password-input';
+import { GoogleButtonComponent } from '../../components/google-button/google-button';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [
+    FormsModule,
+    RouterLink,
+    AuthLayoutComponent,
+    PasswordInputComponent,
+    GoogleButtonComponent,
+  ],
   templateUrl: './login.html',
   styleUrl: './login.css',
 })
 export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly toast = inject(ToastService);
 
   // Form fields
   protected email = '';
@@ -22,7 +33,6 @@ export class LoginComponent {
   protected isLoading = signal(false);
   protected isGoogleLoading = signal(false);
   protected errorMessage = signal('');
-  protected showPassword = signal(false);
 
   // Password reset modal
   protected showResetModal = signal(false);
@@ -30,11 +40,6 @@ export class LoginComponent {
   protected resetLoading = signal(false);
   protected resetMessage = signal('');
   protected resetError = signal('');
-
-  // Toast
-  protected toastMessage = signal('');
-  protected toastType = signal<'success' | 'error'>('success');
-  protected toastVisible = signal(false);
 
   async onSignIn(): Promise<void> {
     if (!this.email || !this.password) {
@@ -49,8 +54,7 @@ export class LoginComponent {
       await this.authService.signIn(this.email, this.password);
       this.router.navigate(['/dashboard']);
     } catch (error: unknown) {
-      const authError = error as { message: string };
-      this.errorMessage.set(authError.message);
+      this.errorMessage.set((error as AuthError).message);
     } finally {
       this.isLoading.set(false);
     }
@@ -64,8 +68,8 @@ export class LoginComponent {
       await this.authService.signInWithGoogle();
       this.router.navigate(['/dashboard']);
     } catch (error: unknown) {
-      const authError = error as { message: string };
-      if (authError.message !== 'Google sign-in was cancelled.') {
+      const authError = error as AuthError;
+      if (authError.code !== 'auth/popup-closed-by-user') {
         this.errorMessage.set(authError.message);
       }
     } finally {
@@ -96,27 +100,13 @@ export class LoginComponent {
 
     try {
       await this.authService.resetPassword(this.resetEmail);
-      this.resetMessage.set(
-        'Password reset email sent! Check your inbox.'
-      );
+      this.resetMessage.set('Password reset email sent! Check your inbox.');
       setTimeout(() => this.closeResetModal(), 2500);
-      this.showToast('Password reset email sent!', 'success');
+      this.toast.show('Password reset email sent!', 'success');
     } catch (error: unknown) {
-      const authError = error as { message: string };
-      this.resetError.set(authError.message);
+      this.resetError.set((error as AuthError).message);
     } finally {
       this.resetLoading.set(false);
     }
-  }
-
-  togglePasswordVisibility(): void {
-    this.showPassword.update((v) => !v);
-  }
-
-  private showToast(message: string, type: 'success' | 'error'): void {
-    this.toastMessage.set(message);
-    this.toastType.set(type);
-    this.toastVisible.set(true);
-    setTimeout(() => this.toastVisible.set(false), 3500);
   }
 }

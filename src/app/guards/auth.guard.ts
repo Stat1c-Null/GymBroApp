@@ -1,41 +1,14 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { AuthService } from '../services/auth.service';
+import { Auth, authState } from '@angular/fire/auth';
+import { firstValueFrom } from 'rxjs';
 
-export const authGuard: CanActivateFn = () => {
-  const authService = inject(AuthService);
+export const authGuard: CanActivateFn = async () => {
   const router = inject(Router);
 
-  if (authService.currentUser()) {
-    return true;
-  }
+  // authState emits once Firebase has restored the persisted session,
+  // so a single value tells us whether the user is signed in.
+  const user = await firstValueFrom(authState(inject(Auth)));
 
-  // If still loading auth state, wait briefly then check again
-  if (authService.isLoading()) {
-    return new Promise<boolean>((resolve) => {
-      const checkInterval = setInterval(() => {
-        if (!authService.isLoading()) {
-          clearInterval(checkInterval);
-          if (authService.currentUser()) {
-            resolve(true);
-          } else {
-            router.navigate(['/login']);
-            resolve(false);
-          }
-        }
-      }, 50);
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!authService.currentUser()) {
-          router.navigate(['/login']);
-          resolve(false);
-        }
-      }, 5000);
-    });
-  }
-
-  router.navigate(['/login']);
-  return false;
+  return user ? true : router.createUrlTree(['/login']);
 };

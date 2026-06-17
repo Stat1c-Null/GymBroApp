@@ -1,10 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { BrandLogoComponent } from '../../components/brand-logo/brand-logo';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
+  imports: [BrandLogoComponent],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })

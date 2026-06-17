@@ -25,8 +25,9 @@ export class ThemeService {
     if (stored === 'light' || stored === 'dark') {
       return stored;
     }
-    return window.matchMedia('(prefers-color-scheme: light)').matches
-      ? 'light'
-      : 'dark';
+    const prefersLight =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-color-scheme: light)').matches;
+    return prefersLight ? 'light' : 'dark';
   }
 }
