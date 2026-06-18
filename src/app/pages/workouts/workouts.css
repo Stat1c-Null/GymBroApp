@@ -75,7 +75,12 @@
   color: var(--text-muted);
 }
 
-.workout-delete {
+.workout-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.workout-action {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,6 +93,11 @@
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+.workout-action:hover {
+  background: var(--primary-glow);
+  color: var(--primary-light);
 }
 
 .workout-delete:hover {

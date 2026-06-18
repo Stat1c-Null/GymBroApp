@@ -29,17 +29,21 @@ export class WorkoutsComponent {
   protected readonly showModal = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal('');
+  /** null = adding a new workout; a string id = editing that workout. */
+  protected readonly editingId = signal<string | null>(null);
 
   protected name = '';
   protected muscleGroup: MuscleGroup = MUSCLE_GROUPS[0];
   protected usualWeight: number | null = null;
   protected maxWeight: number | null = null;
 
-  protected openModal(): void {
-    this.name = '';
-    this.muscleGroup = MUSCLE_GROUPS[0];
-    this.usualWeight = null;
-    this.maxWeight = null;
+  /** Open the modal — pass a workout to edit it, or nothing to add a new one. */
+  protected openModal(workout?: Workout): void {
+    this.editingId.set(workout?.id ?? null);
+    this.name = workout?.name ?? '';
+    this.muscleGroup = workout?.muscleGroup ?? MUSCLE_GROUPS[0];
+    this.usualWeight = workout?.usualWeight ?? null;
+    this.maxWeight = workout?.maxWeight ?? null;
     this.error.set('');
     this.showModal.set(true);
   }
@@ -57,14 +61,22 @@ export class WorkoutsComponent {
     this.saving.set(true);
     this.error.set('');
 
+    const data = {
+      name: this.name.trim(),
+      muscleGroup: this.muscleGroup,
+      usualWeight: this.usualWeight ?? null,
+      maxWeight: this.maxWeight ?? null,
+    };
+    const id = this.editingId();
+
     try {
-      await this.service.add({
-        name: this.name.trim(),
-        muscleGroup: this.muscleGroup,
-        usualWeight: this.usualWeight ?? null,
-        maxWeight: this.maxWeight ?? null,
-      });
-      this.toast.show('Workout added!', 'success');
+      if (id) {
+        await this.service.update(id, data);
+        this.toast.show('Workout updated!', 'success');
+      } else {
+        await this.service.add(data);
+        this.toast.show('Workout added!', 'success');
+      }
       this.closeModal();
     } catch {
       this.error.set('Could not save your workout. Please try again.');

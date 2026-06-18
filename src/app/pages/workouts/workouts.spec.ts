@@ -4,21 +4,32 @@ import { WorkoutsComponent } from './workouts';
 import { WorkoutService } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
 
+interface WorkoutLike {
+  id?: string;
+  name: string;
+  muscleGroup?: string;
+  usualWeight?: number | null;
+  maxWeight?: number | null;
+}
+
 /** Typed window onto WorkoutsComponent's `protected` members. */
 interface WorkoutsView {
   name: string;
   muscleGroup: string;
   usualWeight: number | null;
   maxWeight: number | null;
+  openModal: (workout?: WorkoutLike) => void;
   onSubmit: () => Promise<void>;
-  onDelete: (workout: { id?: string; name: string }) => Promise<void>;
+  onDelete: (workout: WorkoutLike) => Promise<void>;
   error: () => string;
+  editingId: () => string | null;
 }
 
 describe('WorkoutsComponent', () => {
   let view: WorkoutsView;
   let service: {
     add: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
     workouts: () => unknown[];
   };
@@ -27,6 +38,7 @@ describe('WorkoutsComponent', () => {
   beforeEach(async () => {
     service = {
       add: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
       workouts: () => [],
     };
@@ -68,6 +80,29 @@ describe('WorkoutsComponent', () => {
 
     expect(service.add).not.toHaveBeenCalled();
     expect(view.error()).toBeTruthy();
+  });
+
+  it('updates an existing workout when opened in edit mode', async () => {
+    view.openModal({
+      id: 'abc123',
+      name: 'Squat',
+      muscleGroup: 'Legs',
+      usualWeight: 90,
+      maxWeight: 120,
+    });
+    expect(view.editingId()).toBe('abc123');
+
+    view.maxWeight = 140;
+    await view.onSubmit();
+
+    expect(service.update).toHaveBeenCalledWith('abc123', {
+      name: 'Squat',
+      muscleGroup: 'Legs',
+      usualWeight: 90,
+      maxWeight: 140,
+    });
+    expect(service.add).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledWith('Workout updated!', 'success');
   });
 
   it('deletes a workout once the user confirms', async () => {

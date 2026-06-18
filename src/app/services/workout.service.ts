@@ -5,6 +5,7 @@ import {
   collection,
   collectionData,
   addDoc,
+  updateDoc,
   deleteDoc,
   doc,
   query,
@@ -64,6 +65,17 @@ export class WorkoutService {
     await addDoc(this.userWorkouts(uid), {
       ...data,
       createdAt: serverTimestamp(),
+    });
+  }
+
+  async update(
+    id: string,
+    data: Omit<Workout, 'id' | 'createdAt'>
+  ): Promise<void> {
+    const uid = this.auth.currentUser()?.uid;
+    if (!uid) throw new Error('You must be signed in to edit a workout.');
+    await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
+      ...data,
     });
   }
 
