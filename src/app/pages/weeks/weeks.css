@@ -1,0 +1,200 @@
+/* Week-specific layout. Shared list/card/modal styles live in styles.css. */
+
+/* Use the full width + height of the content area (override the centered,
+   max-width 1100px global .page — scoped selector wins over the global one). */
+.page {
+  max-width: none;
+  height: calc(100vh - 4rem); /* fill viewport minus shell-content's 2rem padding */
+  display: flex;
+  flex-direction: column;
+}
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.week-nav .btn {
+  padding: 8px 14px;
+}
+
+/* 7-day grid — fills remaining height; scrolls horizontally on narrow screens. */
+.week-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(180px, 1fr));
+  grid-template-rows: 1fr; /* single row stretches to the grid's full height */
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.day-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border-radius: var(--radius-lg);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden; /* contain the inner entries scroll */
+}
+
+.day-column.is-today {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-glow);
+}
+
+.day-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.day-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.day-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.day-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.day-add {
+  width: 30px;
+  height: 30px;
+}
+
+.day-entries {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto; /* a day with many workouts scrolls within its column */
+}
+
+.day-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.55rem 0.65rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.day-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.day-entry-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-entry .list-action {
+  width: 26px;
+  height: 26px;
+}
+
+.day-entry-sets {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.day-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0;
+}
+
+/* Modal: per-set reps + weight rows */
+.form-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.set-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.set-index {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.set-row .form-input {
+  padding: 10px 12px;
+}
+
+/* On small screens, stack the 7 days vertically — each day full-width and
+   growing with the workouts added to it (no fixed height, no inner scroll). */
+@media (max-width: 768px) {
+  .page {
+    height: auto;
+  }
+
+  /* Stack title above the week nav, and give the nav its own full-width row so
+     all three buttons (incl. "This week") fit instead of overflowing. */
+  .list-header {
+    flex-direction: column;
+  }
+
+  .week-nav {
+    width: 100%;
+  }
+
+  .week-nav .btn {
+    flex: 1;
+    padding: 8px 10px;
+  }
+
+  .week-grid {
+    flex: none;
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    overflow-x: visible;
+  }
+
+  .day-column {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .day-entries {
+    overflow: visible;
+  }
+}
