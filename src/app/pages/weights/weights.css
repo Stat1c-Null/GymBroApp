@@ -1,0 +1,6 @@
+/* Weight-specific bits. Shared list/card/modal styles live in styles.css. */
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: -0.75rem;
+}

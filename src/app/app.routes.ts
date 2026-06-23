@@ -36,6 +36,11 @@ export const routes: Routes = [
           import('./pages/workouts/workouts').then((m) => m.WorkoutsComponent),
       },
       {
+        path: 'weights',
+        loadComponent: () =>
+          import('./pages/weights/weights').then((m) => m.WeightsComponent),
+      },
+      {
         path: 'analytics',
         loadComponent: () =>
           import('./pages/analytics/analytics').then(
