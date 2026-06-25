@@ -145,12 +145,16 @@
       @if (setRows().length) {
         <div class="set-rows">
           @for (s of setRows(); track $index) {
-            <div class="set-row">
+            <div class="set-row" [class.with-time]="showSetTime()">
               <span class="set-index">Set {{ $index + 1 }}</span>
               <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
                 [name]="'reps' + $index" aria-label="Reps" />
               <input class="form-input" type="number" min="0" placeholder="{{ unit }}" [(ngModel)]="s.weight"
                 [name]="'weight' + $index" aria-label="Weight" />
+              @if (showSetTime()) {
+                <input class="form-input" type="text" placeholder="m:ss"
+                  [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
+              }
             </div>
           }
         </div>

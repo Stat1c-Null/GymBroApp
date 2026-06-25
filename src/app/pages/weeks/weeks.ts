@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
+import { SettingsService } from '../../services/settings.service';
 import {
   WorkoutService,
   MUSCLE_GROUPS,
@@ -11,10 +12,19 @@ import {
 import {
   WeekService,
   WeekEntry,
-  WorkoutSet,
   DAY_LABELS,
   toWeekId,
+  parseTime,
+  formatTime,
 } from '../../services/week.service';
+
+/** A per-set row in the modal. `timeText` is the raw m:ss text the user edits;
+ *  it's parsed to seconds (the stored `WorkoutSet.time`) on submit. */
+interface SetRow {
+  reps: number | null;
+  weight: number | null;
+  timeText: string;
+}
 
 @Component({
   selector: 'app-weeks',
@@ -26,9 +36,13 @@ import {
 export class WeeksComponent {
   private readonly service = inject(WeekService);
   private readonly workoutService = inject(WorkoutService);
+  private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
 
   protected readonly muscleGroups = MUSCLE_GROUPS;
+
+  /** When on, each set row shows an m:ss time field (Settings page toggle). */
+  protected readonly showSetTime = this.settings.showSetTime;
 
   // TODO: source from user settings once the Settings page exists.
   protected readonly unit = 'lbs';
@@ -68,7 +82,7 @@ export class WeeksComponent {
   protected readonly activeDay = signal(0);
   protected readonly modalMuscleGroup = signal<MuscleGroup>(MUSCLE_GROUPS[0]);
   protected readonly modalWorkoutId = signal('');
-  protected readonly setRows = signal<WorkoutSet[]>([]);
+  protected readonly setRows = signal<SetRow[]>([]);
 
   /** Library workouts in the modal's selected muscle group. */
   protected readonly filteredWorkouts = computed(() =>
@@ -96,7 +110,13 @@ export class WeeksComponent {
     this.activeDay.set(entry.day);
     this.modalMuscleGroup.set(entry.muscleGroup);
     this.modalWorkoutId.set(entry.workoutId);
-    this.setRows.set(entry.sets.map((s) => ({ ...s })));
+    this.setRows.set(
+      entry.sets.map((s) => ({
+        reps: s.reps,
+        weight: s.weight,
+        timeText: formatTime(s.time ?? null),
+      }))
+    );
     this.error.set('');
     this.showModal.set(true);
   }
@@ -126,7 +146,7 @@ export class WeeksComponent {
     this.setRows.set(
       Array.from(
         { length: count },
-        (_, i) => current[i] ?? { reps: null, weight }
+        (_, i) => current[i] ?? { reps: null, weight, timeText: '' }
       )
     );
   }
@@ -165,7 +185,11 @@ export class WeeksComponent {
       workoutId: workout.id,
       workoutName: workout.name,
       muscleGroup: workout.muscleGroup,
-      sets: sets.map((s) => ({ reps: s.reps, weight: s.weight ?? null })),
+      sets: sets.map((s) => ({
+        reps: s.reps,
+        weight: s.weight ?? null,
+        time: parseTime(s.timeText),
+      })),
     };
     const id = this.editingId();
 
@@ -196,11 +220,13 @@ export class WeeksComponent {
     }
   }
 
-  /** Compact per-set summary, e.g. "12×60 · 10×60 · 8×65 lbs". */
+  /** Compact per-set summary, e.g. "12×60 · 10×60 (1:30) · 8×65 lbs".
+   *  Times are shown whenever a set has one stored — independent of the toggle. */
   protected setSummary(entry: WeekEntry): string {
-    const parts = entry.sets.map((s) =>
-      s.weight != null ? `${s.reps}×${s.weight}` : `${s.reps}`
-    );
+    const parts = entry.sets.map((s) => {
+      const base = s.weight != null ? `${s.reps}×${s.weight}` : `${s.reps}`;
+      return s.time != null ? `${base} (${formatTime(s.time)})` : base;
+    });
     const hasWeight = entry.sets.some((s) => s.weight != null);
     return parts.join(' · ') + (hasWeight ? ` ${this.unit}` : '');
   }

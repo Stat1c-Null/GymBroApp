@@ -47,6 +47,11 @@ export const routes: Routes = [
             (m) => m.AnalyticsComponent
           ),
       },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./pages/settings/settings').then((m) => m.SettingsComponent),
+      },
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
     ],
   },

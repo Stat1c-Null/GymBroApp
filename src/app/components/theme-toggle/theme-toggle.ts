@@ -31,71 +31,8 @@ import { ThemeService } from '../../services/theme.service';
       </button>
     </div>
   `,
-  styles: [`
-    .setting-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 16px;
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border-subtle);
-      transition: border-color var(--transition-fast);
-    }
-
-    .setting-item:hover {
-      border-color: var(--border-color);
-    }
-
-    .setting-label {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.9rem;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .setting-icon {
-      color: var(--primary);
-      display: flex;
-      align-items: center;
-    }
-
-    .theme-switch {
-      position: relative;
-      width: 48px;
-      height: 26px;
-      border-radius: 13px;
-      background: var(--bg-input);
-      border: 1.5px solid var(--border-color);
-      cursor: pointer;
-      padding: 0;
-      transition: all var(--transition-fast);
-    }
-
-    .theme-switch.active {
-      background: var(--primary-gradient);
-      border-color: var(--primary);
-    }
-
-    .switch-knob {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--text-secondary);
-      transition: all var(--transition-normal);
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-    }
-
-    .theme-switch.active .switch-knob {
-      left: calc(100% - 20px);
-      background: white;
-    }
-  `],
+  // .setting-item / .theme-switch / .switch-knob styles are global (styles.css),
+  // shared with the Settings page.
 })
 export class ThemeToggleComponent {
   protected readonly themeService = inject(ThemeService);

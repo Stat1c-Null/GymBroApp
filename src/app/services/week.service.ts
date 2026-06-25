@@ -30,6 +30,32 @@ export const DAY_LABELS = [
 export interface WorkoutSet {
   reps: number | null;
   weight: number | null;
+  time?: number | null; // duration in seconds (optional; older entries lack it)
+}
+
+/** "m:ss" (or bare seconds) → total seconds; null for blank/invalid input. */
+export function parseTime(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(':');
+  if (parts.length === 1) {
+    const secs = Number(parts[0]);
+    return Number.isFinite(secs) && secs >= 0 ? Math.floor(secs) : null;
+  }
+  const mins = Number(parts[0]);
+  const secs = Number(parts[1]);
+  if (!Number.isFinite(mins) || !Number.isFinite(secs) || mins < 0 || secs < 0) {
+    return null;
+  }
+  return Math.floor(mins) * 60 + Math.floor(secs);
+}
+
+/** Total seconds → "m:ss" (seconds zero-padded); "" for null. */
+export function formatTime(seconds: number | null): string {
+  if (seconds == null) return '';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 export interface WeekEntry {

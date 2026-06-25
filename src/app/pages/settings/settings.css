@@ -1,0 +1,21 @@
+/* Settings-specific bits. The .setting-item / switch styles are global
+   (shared with the sidebar theme toggle) in styles.css. */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.setting-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  max-width: 42ch;
+}

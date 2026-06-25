@@ -4,12 +4,14 @@ import { WeeksComponent } from './weeks';
 import {
   WeekService,
   WeekEntry,
-  WorkoutSet,
   mondayOf,
   toWeekId,
+  parseTime,
+  formatTime,
 } from '../../services/week.service';
 import { WorkoutService } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
+import { SettingsService } from '../../services/settings.service';
 
 /** Typed window onto WeeksComponent's `protected` members. */
 interface WeeksView {
@@ -20,7 +22,7 @@ interface WeeksView {
   onSetsCountChange: (value: number | null) => void;
   onSubmit: () => Promise<void>;
   onDelete: (entry: WeekEntry) => Promise<void>;
-  setRows: () => WorkoutSet[];
+  setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
 }
@@ -44,6 +46,21 @@ describe('week.service date helpers', () => {
 
   it('toWeekId formats local YYYY-MM-DD without UTC shift', () => {
     expect(toWeekId(new Date(2026, 5, 1))).toBe('2026-06-01');
+  });
+
+  it('parseTime reads m:ss, bare seconds, and rejects blank/garbage', () => {
+    expect(parseTime('1:30')).toBe(90);
+    expect(parseTime('0:45')).toBe(45);
+    expect(parseTime('45')).toBe(45);
+    expect(parseTime('')).toBeNull();
+    expect(parseTime('  ')).toBeNull();
+    expect(parseTime('abc')).toBeNull();
+  });
+
+  it('formatTime renders m:ss with zero-padded seconds', () => {
+    expect(formatTime(90)).toBe('1:30');
+    expect(formatTime(5)).toBe('0:05');
+    expect(formatTime(null)).toBe('');
   });
 });
 
@@ -86,6 +103,7 @@ describe('WeeksComponent', () => {
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT] } },
         { provide: ToastService, useValue: toast },
+        { provide: SettingsService, useValue: { showSetTime: () => false } },
       ],
     }).compileComponents();
 
@@ -118,12 +136,30 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       sets: [
-        { reps: 10, weight: 60 },
-        { reps: 10, weight: 60 },
-        { reps: 10, weight: 60 },
+        { reps: 10, weight: 60, time: null },
+        { reps: 10, weight: 60, time: null },
+        { reps: 10, weight: 60, time: null },
       ],
     });
     expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+  });
+
+  it('parses an entered m:ss time into seconds on submit', async () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(1);
+    view.setRows()[0].reps = 8;
+    view.setRows()[0].timeText = '1:30';
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith({
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      sets: [{ reps: 8, weight: 60, time: 90 }],
+    });
   });
 
   it('blocks adding the same workout twice on one day', async () => {
@@ -171,7 +207,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
-      sets: [{ reps: 12, weight: 60 }],
+      sets: [{ reps: 12, weight: 60, time: null }],
     });
     expect(service.add).not.toHaveBeenCalled();
     expect(toast.show).toHaveBeenCalledWith('Workout updated!', 'success');
