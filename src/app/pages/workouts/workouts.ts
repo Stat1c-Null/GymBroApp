@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import {
@@ -21,6 +21,34 @@ export class WorkoutsComponent {
 
   protected readonly workouts = this.service.workouts;
   protected readonly muscleGroups = MUSCLE_GROUPS;
+
+  /**
+   * Workouts grouped by muscle group, in the preset MUSCLE_GROUPS order.
+   * Groups with no workouts are omitted, so only populated groups get a dropdown.
+   */
+  protected readonly groupedWorkouts = computed(() => {
+    const list = this.workouts() ?? [];
+    return MUSCLE_GROUPS.map((group) => ({
+      group,
+      items: list.filter((w) => w.muscleGroup === group),
+    })).filter((g) => g.items.length > 0);
+  });
+
+  /** Muscle-group sections currently expanded (collapsed by default). */
+  protected readonly expandedGroups = signal<ReadonlySet<string>>(new Set());
+
+  protected isExpanded(group: string): boolean {
+    return this.expandedGroups().has(group);
+  }
+
+  protected toggleGroup(group: string): void {
+    this.expandedGroups.update((groups) => {
+      const next = new Set(groups);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
 
   // TODO: source from user settings once the Settings page exists.
   protected readonly unit = 'lbs';

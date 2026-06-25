@@ -546,6 +546,7 @@ a:hover {
 
 .list-header .btn {
   width: auto;
+  flex-shrink: 0; /* keep full width on narrow screens instead of clipping the label */
 }
 
 .list {

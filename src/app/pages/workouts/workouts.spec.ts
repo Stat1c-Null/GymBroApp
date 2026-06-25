@@ -23,10 +23,14 @@ interface WorkoutsView {
   onDelete: (workout: WorkoutLike) => Promise<void>;
   error: () => string;
   editingId: () => string | null;
+  groupedWorkouts: () => { group: string; items: WorkoutLike[] }[];
+  isExpanded: (group: string) => boolean;
+  toggleGroup: (group: string) => void;
 }
 
 describe('WorkoutsComponent', () => {
   let view: WorkoutsView;
+  let workoutsData: WorkoutLike[];
   let service: {
     add: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -36,11 +40,12 @@ describe('WorkoutsComponent', () => {
   let toast: { show: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    workoutsData = [];
     service = {
       add: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      workouts: () => [],
+      workouts: () => workoutsData,
     };
     toast = { show: vi.fn() };
 
@@ -120,5 +125,30 @@ describe('WorkoutsComponent', () => {
     await view.onDelete({ id: 'abc123', name: 'Squat' });
 
     expect(service.remove).not.toHaveBeenCalled();
+  });
+
+  it('groups workouts by muscle group in preset order, omitting empty groups', () => {
+    workoutsData = [
+      { id: '1', name: 'Curl', muscleGroup: 'Arms' },
+      { id: '2', name: 'Bench', muscleGroup: 'Chest' },
+      { id: '3', name: 'Press', muscleGroup: 'Arms' },
+    ];
+
+    const groups = view.groupedWorkouts();
+
+    // Chest comes before Arms in MUSCLE_GROUPS, and Legs (empty) is dropped.
+    expect(groups.map((g) => g.group)).toEqual(['Chest', 'Arms']);
+    expect(groups.find((g) => g.group === 'Arms')?.items).toHaveLength(2);
+  });
+
+  it('toggles a group between expanded and collapsed', () => {
+    expect(view.isExpanded('Arms')).toBe(false);
+
+    view.toggleGroup('Arms');
+    expect(view.isExpanded('Arms')).toBe(true);
+    expect(view.isExpanded('Chest')).toBe(false);
+
+    view.toggleGroup('Arms');
+    expect(view.isExpanded('Arms')).toBe(false);
   });
 });
