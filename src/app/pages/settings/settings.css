@@ -35,6 +35,13 @@
   margin-bottom: 0;
 }
 
+.muscle-group-edit-input {
+  flex: 1;
+  margin-bottom: 0;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+
 .muscle-group-confirm {
   flex-direction: column;
   align-items: flex-start;

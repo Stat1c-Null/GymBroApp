@@ -41,19 +41,51 @@
     <!-- Group list -->
     @for (group of muscleGroups(); track group) {
       <div class="list-card glass-card">
-        <span class="list-name">{{ group }}</span>
-        <div class="list-actions">
-          <button class="list-action list-delete" (click)="requestDeleteGroup(group)"
-            [disabled]="managingGroups()" aria-label="Delete {{ group }}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-            </svg>
-          </button>
-        </div>
+        @if (editingGroup() === group) {
+          <input class="form-input muscle-group-edit-input" type="text" name="editingGroupName"
+            [(ngModel)]="editingGroupName" (keydown.enter)="confirmRenameGroup()"
+            (keydown.escape)="cancelEditGroup()" aria-label="Rename {{ group }}" />
+          <div class="list-actions">
+            <button class="list-action" (click)="confirmRenameGroup()" [disabled]="renamingGroup()"
+              aria-label="Save rename">
+              @if (renamingGroup()) {
+                <span class="spinner"></span>
+              } @else {
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              }
+            </button>
+            <button class="list-action" (click)="cancelEditGroup()" aria-label="Cancel rename">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        } @else {
+          <span class="list-name">{{ group }}</span>
+          <div class="list-actions">
+            <button class="list-action" (click)="startEditGroup(group)"
+              [disabled]="managingGroups() || renamingGroup()" aria-label="Edit {{ group }}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+            <button class="list-action list-delete" (click)="requestDeleteGroup(group)"
+              [disabled]="managingGroups() || renamingGroup()" aria-label="Delete {{ group }}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </button>
+          </div>
+        }
       </div>
     }
 

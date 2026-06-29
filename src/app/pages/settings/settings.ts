@@ -68,7 +68,54 @@ export class SettingsComponent {
     }
   }
 
+  // Inline rename
+  protected readonly editingGroup = signal<string | null>(null);
+  protected editingGroupName = '';
+  protected readonly renamingGroup = signal(false);
+
+  protected startEditGroup(group: string): void {
+    this.pendingDeleteGroup.set(null);
+    this.editingGroupName = group;
+    this.editingGroup.set(group);
+  }
+
+  protected cancelEditGroup(): void {
+    this.editingGroup.set(null);
+  }
+
+  protected async confirmRenameGroup(): Promise<void> {
+    const oldName = this.editingGroup();
+    const newName = this.editingGroupName.trim();
+    if (!oldName) return;
+    if (!newName || newName === oldName) {
+      this.editingGroup.set(null);
+      return;
+    }
+    if (newName.toLowerCase() === 'unassigned') {
+      this.toast.show('"Unassigned" is reserved and cannot be used.', 'error');
+      return;
+    }
+    const current = this.settings.muscleGroups();
+    if (current.some((g) => g !== oldName && g.toLowerCase() === newName.toLowerCase())) {
+      this.toast.show(`"${newName}" already exists.`, 'error');
+      return;
+    }
+    this.renamingGroup.set(true);
+    try {
+      await this.workoutService.renameGroup(oldName, newName);
+      await this.settings.setMuscleGroups(
+        current.map((g) => (g === oldName ? newName : g))
+      );
+      this.editingGroup.set(null);
+    } catch {
+      this.toast.show('Could not rename group. Please try again.', 'error');
+    } finally {
+      this.renamingGroup.set(false);
+    }
+  }
+
   protected requestDeleteGroup(group: string): void {
+    this.editingGroup.set(null);
     this.pendingDeleteGroup.set(group);
   }
 

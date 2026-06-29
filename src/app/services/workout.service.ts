@@ -81,6 +81,18 @@ export class WorkoutService {
     await deleteDoc(doc(this.firestore, 'users', uid, 'workouts', id));
   }
 
+  async renameGroup(from: string, to: string): Promise<void> {
+    const uid = this.auth.currentUser()?.uid;
+    if (!uid) throw new Error('You must be signed in.');
+    const snapshot = await getDocs(
+      query(this.userWorkouts(uid), where('muscleGroup', '==', from))
+    );
+    if (snapshot.empty) return;
+    const batch = writeBatch(this.firestore);
+    snapshot.docs.forEach((d) => batch.update(d.ref, { muscleGroup: to }));
+    await batch.commit();
+  }
+
   async reassignMuscleGroup(from: string): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) throw new Error('You must be signed in.');
