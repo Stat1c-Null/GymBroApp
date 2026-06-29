@@ -6,6 +6,51 @@
   gap: 0.85rem;
 }
 
+.muscle-groups-section {
+  margin-top: 1.5rem;
+}
+
+.muscle-groups-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.settings-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.muscle-group-add-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.muscle-group-add-row .form-input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.muscle-group-confirm {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.muscle-group-confirm p {
+  margin: 0;
+}
+
+.muscle-group-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-self: flex-end;
+}
+
 .setting-text {
   display: flex;
   flex-direction: column;

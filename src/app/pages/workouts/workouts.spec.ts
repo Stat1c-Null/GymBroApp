@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkoutsComponent } from './workouts';
-import { WorkoutService } from '../../services/workout.service';
+import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
+import { SettingsService } from '../../services/settings.service';
 
 interface WorkoutLike {
   id?: string;
@@ -54,6 +55,7 @@ describe('WorkoutsComponent', () => {
       providers: [
         { provide: WorkoutService, useValue: service },
         { provide: ToastService, useValue: toast },
+        { provide: SettingsService, useValue: { muscleGroups: () => [...MUSCLE_GROUPS] } },
       ],
     }).compileComponents();
 

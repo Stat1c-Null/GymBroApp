@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsComponent } from './settings';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
+import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
 
 /** Typed window onto SettingsComponent's `protected` members. */
 interface SettingsView {
@@ -13,7 +14,12 @@ interface SettingsView {
 describe('SettingsComponent', () => {
   let view: SettingsView;
   let showSetTimeValue: boolean;
-  let settings: { showSetTime: () => boolean; setShowSetTime: ReturnType<typeof vi.fn> };
+  let settings: {
+    showSetTime: () => boolean;
+    setShowSetTime: ReturnType<typeof vi.fn>;
+    muscleGroups: () => string[];
+    setMuscleGroups: ReturnType<typeof vi.fn>;
+  };
   let toast: { show: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
@@ -21,6 +27,8 @@ describe('SettingsComponent', () => {
     settings = {
       showSetTime: () => showSetTimeValue,
       setShowSetTime: vi.fn().mockResolvedValue(undefined),
+      muscleGroups: () => [...MUSCLE_GROUPS],
+      setMuscleGroups: vi.fn().mockResolvedValue(undefined),
     };
     toast = { show: vi.fn() };
 
@@ -29,6 +37,7 @@ describe('SettingsComponent', () => {
       providers: [
         { provide: SettingsService, useValue: settings },
         { provide: ToastService, useValue: toast },
+        { provide: WorkoutService, useValue: { workouts: () => [], reassignMuscleGroup: vi.fn() } },
       ],
     }).compileComponents();
 

@@ -11,20 +11,16 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  writeBatch,
+  getDocs,
+  where,
 } from '@angular/fire/firestore';
 import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 
-/** Preset muscle groups (extend here to add more). */
-export const MUSCLE_GROUPS = [
-  'Chest',
-  'Back',
-  'Legs',
-  'Shoulders',
-  'Arms',
-  'Core',
-] as const;
-export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
+/** Default muscle groups — used as fallback when user has not customized their list. */
+export const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
+export type MuscleGroup = string;
 
 export interface Workout {
   id?: string;
@@ -83,6 +79,18 @@ export class WorkoutService {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) throw new Error('You must be signed in to delete a workout.');
     await deleteDoc(doc(this.firestore, 'users', uid, 'workouts', id));
+  }
+
+  async reassignMuscleGroup(from: string): Promise<void> {
+    const uid = this.auth.currentUser()?.uid;
+    if (!uid) throw new Error('You must be signed in.');
+    const snapshot = await getDocs(
+      query(this.userWorkouts(uid), where('muscleGroup', '==', from))
+    );
+    if (snapshot.empty) return;
+    const batch = writeBatch(this.firestore);
+    snapshot.docs.forEach((d) => batch.update(d.ref, { muscleGroup: 'Unassigned' }));
+    await batch.commit();
   }
 
   private userWorkouts(uid: string) {

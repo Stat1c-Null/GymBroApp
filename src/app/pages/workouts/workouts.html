@@ -112,7 +112,7 @@
       <div class="form-group">
         <label class="form-label" for="workout-muscle">Muscle group</label>
         <select class="form-input" id="workout-muscle" [(ngModel)]="muscleGroup" name="muscleGroup">
-          @for (group of muscleGroups; track group) {
+          @for (group of muscleGroupsForForm(); track group) {
             <option [value]="group">{{ group }}</option>
           }
         </select>

@@ -30,4 +30,67 @@
       </button>
     </div>
   </div>
+
+  <!-- Muscle Groups -->
+  <div class="settings-group muscle-groups-section">
+    <div class="muscle-groups-header">
+      <h2 class="settings-section-title">Muscle Groups</h2>
+      <p class="setting-hint">Add or remove the categories used to organize your workouts.</p>
+    </div>
+
+    <!-- Group list -->
+    @for (group of muscleGroups(); track group) {
+      <div class="list-card glass-card">
+        <span class="list-name">{{ group }}</span>
+        <div class="list-actions">
+          <button class="list-action list-delete" (click)="requestDeleteGroup(group)"
+            [disabled]="managingGroups()" aria-label="Delete {{ group }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Confirmation banner -->
+    @if (pendingDeleteGroup()) {
+      <div class="auth-error muscle-group-confirm">
+        @if (affectedCount() > 0) {
+          <p>
+            <strong>{{ affectedCount() }}</strong> workout{{ affectedCount() === 1 ? '' : 's' }} will be moved to
+            <strong>Unassigned</strong>. Remove "{{ pendingDeleteGroup() }}"?
+          </p>
+        } @else {
+          <p>Remove "{{ pendingDeleteGroup() }}"?</p>
+        }
+        <div class="muscle-group-confirm-actions">
+          <button class="btn btn-secondary" (click)="cancelDeleteGroup()">Cancel</button>
+          <button class="btn btn-primary" (click)="confirmDeleteGroup()" [disabled]="managingGroups()">
+            @if (managingGroups()) {
+              <span class="spinner"></span>
+            }
+            Remove
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Add group row -->
+    <div class="muscle-group-add-row">
+      <input class="form-input" type="text" placeholder="e.g. Glutes"
+        [(ngModel)]="newGroupName" (keydown.enter)="addGroup()" />
+      <button class="btn btn-primary" (click)="addGroup()"
+        [disabled]="addingGroup() || !newGroupName.trim()">
+        @if (addingGroup()) {
+          <span class="spinner"></span>
+        }
+        Add
+      </button>
+    </div>
+  </div>
 </section>

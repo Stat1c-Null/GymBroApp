@@ -103,7 +103,7 @@ describe('WeeksComponent', () => {
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT] } },
         { provide: ToastService, useValue: toast },
-        { provide: SettingsService, useValue: { showSetTime: () => false } },
+        { provide: SettingsService, useValue: { showSetTime: () => false, muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'] } },
       ],
     }).compileComponents();
 

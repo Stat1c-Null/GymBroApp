@@ -110,7 +110,7 @@
         <label class="form-label" for="week-muscle">Muscle group</label>
         <select class="form-input" id="week-muscle" [ngModel]="modalMuscleGroup()"
           (ngModelChange)="onMuscleGroupChange($event)" name="muscleGroup">
-          @for (group of muscleGroups; track group) {
+          @for (group of muscleGroups(); track group) {
             <option [value]="group">{{ group }}</option>
           }
         </select>

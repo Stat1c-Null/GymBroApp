@@ -1,12 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
-import {
-  WorkoutService,
-  MUSCLE_GROUPS,
-  MuscleGroup,
-  Workout,
-} from '../../services/workout.service';
+import { WorkoutService, Workout } from '../../services/workout.service';
+import { SettingsService } from '../../services/settings.service';
 
 @Component({
   selector: 'app-workouts',
@@ -17,21 +13,27 @@ import {
 })
 export class WorkoutsComponent {
   private readonly service = inject(WorkoutService);
+  private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
 
   protected readonly workouts = this.service.workouts;
-  protected readonly muscleGroups = MUSCLE_GROUPS;
+  protected readonly muscleGroupsForForm = computed(() => [
+    ...this.settings.muscleGroups(),
+    'Unassigned',
+  ]);
 
-  /**
-   * Workouts grouped by muscle group, in the preset MUSCLE_GROUPS order.
-   * Groups with no workouts are omitted, so only populated groups get a dropdown.
-   */
   protected readonly groupedWorkouts = computed(() => {
     const list = this.workouts() ?? [];
-    return MUSCLE_GROUPS.map((group) => ({
-      group,
-      items: list.filter((w) => w.muscleGroup === group),
-    })).filter((g) => g.items.length > 0);
+    const groups = this.settings.muscleGroups();
+    const knownGroups = new Set(groups);
+    const result = groups
+      .map((group) => ({ group, items: list.filter((w) => w.muscleGroup === group) }))
+      .filter((g) => g.items.length > 0);
+    const unassigned = list.filter((w) => !knownGroups.has(w.muscleGroup));
+    if (unassigned.length > 0) {
+      result.push({ group: 'Unassigned', items: unassigned });
+    }
+    return result;
   });
 
   /** Muscle-group sections currently expanded (collapsed by default). */
@@ -61,7 +63,7 @@ export class WorkoutsComponent {
   protected readonly editingId = signal<string | null>(null);
 
   protected name = '';
-  protected muscleGroup: MuscleGroup = MUSCLE_GROUPS[0];
+  protected muscleGroup = '';
   protected usualWeight: number | null = null;
   protected maxWeight: number | null = null;
 
@@ -69,7 +71,7 @@ export class WorkoutsComponent {
   protected openModal(workout?: Workout): void {
     this.editingId.set(workout?.id ?? null);
     this.name = workout?.name ?? '';
-    this.muscleGroup = workout?.muscleGroup ?? MUSCLE_GROUPS[0];
+    this.muscleGroup = workout?.muscleGroup ?? (this.settings.muscleGroups()[0] ?? '');
     this.usualWeight = workout?.usualWeight ?? null;
     this.maxWeight = workout?.maxWeight ?? null;
     this.error.set('');

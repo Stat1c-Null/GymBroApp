@@ -4,11 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
-import {
-  WorkoutService,
-  MUSCLE_GROUPS,
-  MuscleGroup,
-} from '../../services/workout.service';
+import { WorkoutService } from '../../services/workout.service';
 import {
   WeekService,
   WeekEntry,
@@ -39,7 +35,7 @@ export class WeeksComponent {
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
 
-  protected readonly muscleGroups = MUSCLE_GROUPS;
+  protected readonly muscleGroups = computed(() => this.settings.muscleGroups());
 
   /** When on, each set row shows an m:ss time field (Settings page toggle). */
   protected readonly showSetTime = this.settings.showSetTime;
@@ -80,7 +76,7 @@ export class WeeksComponent {
   /** null = adding; a string id = editing that entry. */
   protected readonly editingId = signal<string | null>(null);
   protected readonly activeDay = signal(0);
-  protected readonly modalMuscleGroup = signal<MuscleGroup>(MUSCLE_GROUPS[0]);
+  protected readonly modalMuscleGroup = signal<string>('');
   protected readonly modalWorkoutId = signal('');
   protected readonly setRows = signal<SetRow[]>([]);
 
@@ -98,7 +94,7 @@ export class WeeksComponent {
   protected openAddModal(day: number): void {
     this.editingId.set(null);
     this.activeDay.set(day);
-    this.modalMuscleGroup.set(MUSCLE_GROUPS[0]);
+    this.modalMuscleGroup.set(this.settings.muscleGroups()[0] ?? '');
     this.modalWorkoutId.set('');
     this.setRows.set([]);
     this.error.set('');
@@ -125,7 +121,7 @@ export class WeeksComponent {
     this.showModal.set(false);
   }
 
-  protected onMuscleGroupChange(group: MuscleGroup): void {
+  protected onMuscleGroupChange(group: string): void {
     this.modalMuscleGroup.set(group);
     this.modalWorkoutId.set('');
     this.setRows.set([]);
