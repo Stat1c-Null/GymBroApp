@@ -122,6 +122,35 @@ describe('WeeksComponent', () => {
     expect(rows.every((r) => r.reps === null)).toBe(true);
   });
 
+  it('keeps entered set data when the count field is cleared and retyped', () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(3);
+    view.setRows().forEach((r, i) => (r.reps = 10 + i));
+
+    // Clearing the number input fires ngModelChange(null) before the new
+    // value is typed — this must not wipe what the user already entered.
+    view.onSetsCountChange(null);
+    view.onSetsCountChange(3);
+
+    expect(view.setRows().map((r) => r.reps)).toEqual([10, 11, 12]);
+  });
+
+  it('keeps entered set data while typing a two-digit count', () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(5);
+    view.setRows().forEach((r, i) => (r.reps = 1 + i));
+
+    // Typing "12" over "5" passes through the transient value 1.
+    view.onSetsCountChange(1);
+    view.onSetsCountChange(12);
+
+    const reps = view.setRows().map((r) => r.reps);
+    expect(reps.slice(0, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(reps.slice(5)).toEqual([null, null, null, null, null, null, null]);
+  });
+
   it('saves a valid workout and shows a toast', async () => {
     view.openAddModal(0);
     view.onWorkoutChange('w1');

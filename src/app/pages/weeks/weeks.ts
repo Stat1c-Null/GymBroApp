@@ -79,6 +79,11 @@ export class WeeksComponent {
   protected readonly modalMuscleGroup = signal<string>('');
   protected readonly modalWorkoutId = signal('');
   protected readonly setRows = signal<SetRow[]>([]);
+  /** Every row created since the modal opened, including ones hidden by a
+   *  lower sets count. The visible rows share these objects, so transient
+   *  count values (a cleared field, the "1" while typing "12") only hide
+   *  rows instead of destroying their data. Only visible rows are saved. */
+  private rowPool: SetRow[] = [];
 
   /** Library workouts in the modal's selected muscle group. */
   protected readonly filteredWorkouts = computed(() =>
@@ -96,6 +101,7 @@ export class WeeksComponent {
     this.activeDay.set(day);
     this.modalMuscleGroup.set(this.settings.muscleGroups()[0] ?? '');
     this.modalWorkoutId.set('');
+    this.rowPool = [];
     this.setRows.set([]);
     this.error.set('');
     this.showModal.set(true);
@@ -106,13 +112,12 @@ export class WeeksComponent {
     this.activeDay.set(entry.day);
     this.modalMuscleGroup.set(entry.muscleGroup);
     this.modalWorkoutId.set(entry.workoutId);
-    this.setRows.set(
-      entry.sets.map((s) => ({
-        reps: s.reps,
-        weight: s.weight,
-        timeText: formatTime(s.time ?? null),
-      }))
-    );
+    this.rowPool = entry.sets.map((s) => ({
+      reps: s.reps,
+      weight: s.weight,
+      timeText: formatTime(s.time ?? null),
+    }));
+    this.setRows.set(this.rowPool.slice());
     this.error.set('');
     this.showModal.set(true);
   }
@@ -124,6 +129,7 @@ export class WeeksComponent {
   protected onMuscleGroupChange(group: string): void {
     this.modalMuscleGroup.set(group);
     this.modalWorkoutId.set('');
+    this.rowPool = [];
     this.setRows.set([]);
   }
 
@@ -131,20 +137,19 @@ export class WeeksComponent {
     this.modalWorkoutId.set(id);
     // Re-default each set's weight to the newly chosen workout's usual weight.
     const weight = this.selectedWorkout()?.usualWeight ?? null;
-    this.setRows.update((rows) => rows.map((r) => ({ ...r, weight })));
+    this.rowPool = this.rowPool.map((r) => ({ ...r, weight }));
+    this.setRows.set(this.rowPool.slice(0, this.setRows().length));
   }
 
-  /** Grow/shrink the per-set rows, preserving already-entered values. */
+  /** Grow/shrink the visible per-set rows. Shrinking only hides rows (they
+   *  stay in the pool with their data); growing brings them back. */
   protected onSetsCountChange(value: number | null): void {
     const count = Math.max(0, Math.min(Math.floor(value ?? 0), 20));
-    const current = this.setRows();
     const weight = this.selectedWorkout()?.usualWeight ?? null;
-    this.setRows.set(
-      Array.from(
-        { length: count },
-        (_, i) => current[i] ?? { reps: null, weight, timeText: '' }
-      )
-    );
+    while (this.rowPool.length < count) {
+      this.rowPool.push({ reps: null, weight, timeText: '' });
+    }
+    this.setRows.set(this.rowPool.slice(0, count));
   }
 
   protected async onSubmit(): Promise<void> {
