@@ -11,9 +11,9 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  writeBatch,
   getDocs,
   where,
+  WriteBatch,
 } from '@angular/fire/firestore';
 import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
@@ -21,6 +21,13 @@ import { AuthService } from './auth.service';
 /** Default muscle groups — used as fallback when user has not customized their list. */
 export const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
 export type MuscleGroup = string;
+
+/**
+ * Reserved bucket for workouts whose muscle group no longer exists (e.g. after
+ * the group is deleted). It's never a user-defined group, so any workout whose
+ * `muscleGroup` isn't in the settings list is treated as belonging here.
+ */
+export const UNASSIGNED_GROUP = 'Unassigned';
 
 export interface Workout {
   id?: string;
@@ -47,7 +54,9 @@ export class WorkoutService {
         user
           ? collectionData(
               query(this.userWorkouts(user.uid), orderBy('createdAt', 'desc')),
-              { idField: 'id' }
+              // Estimate pending server timestamps so a new workout doesn't
+              // briefly sort to the bottom before the write commits.
+              { idField: 'id', serverTimestamps: 'estimate' }
             )
           : of(undefined)
       )
@@ -56,8 +65,7 @@ export class WorkoutService {
   ) as () => Workout[] | undefined;
 
   async add(data: Omit<Workout, 'id' | 'createdAt'>): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to add a workout.');
+    const uid = this.auth.requireUid('add a workout');
     await addDoc(this.userWorkouts(uid), {
       ...data,
       createdAt: serverTimestamp(),
@@ -68,41 +76,33 @@ export class WorkoutService {
     id: string,
     data: Omit<Workout, 'id' | 'createdAt'>
   ): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to edit a workout.');
+    const uid = this.auth.requireUid('edit a workout');
     await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
       ...data,
     });
   }
 
   async remove(id: string): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to delete a workout.');
+    const uid = this.auth.requireUid('delete a workout');
     await deleteDoc(doc(this.firestore, 'users', uid, 'workouts', id));
   }
 
-  async renameGroup(from: string, to: string): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in.');
+  /**
+   * Add "move every workout in group `from` to `to`" to an existing batch, so
+   * the caller can commit it atomically alongside the settings update. Returns
+   * the number of workouts affected.
+   */
+  async stageGroupReassign(
+    batch: WriteBatch,
+    from: string,
+    to: string
+  ): Promise<number> {
+    const uid = this.auth.requireUid();
     const snapshot = await getDocs(
       query(this.userWorkouts(uid), where('muscleGroup', '==', from))
     );
-    if (snapshot.empty) return;
-    const batch = writeBatch(this.firestore);
     snapshot.docs.forEach((d) => batch.update(d.ref, { muscleGroup: to }));
-    await batch.commit();
-  }
-
-  async reassignMuscleGroup(from: string): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in.');
-    const snapshot = await getDocs(
-      query(this.userWorkouts(uid), where('muscleGroup', '==', from))
-    );
-    if (snapshot.empty) return;
-    const batch = writeBatch(this.firestore);
-    snapshot.docs.forEach((d) => batch.update(d.ref, { muscleGroup: 'Unassigned' }));
-    await batch.commit();
+    return snapshot.size;
   }
 
   private userWorkouts(uid: string) {

@@ -93,9 +93,34 @@ export class WeekService {
   /** Monday of the week currently being viewed. */
   readonly currentWeekStart = signal<Date>(mondayOf(new Date()));
   readonly weekId = computed(() => toWeekId(this.currentWeekStart()));
+
+  /**
+   * The current local date, refreshed when the tab regains visibility and on a
+   * one-minute timer. `new Date()` inside a computed would never re-run on its
+   * own, so a session left open across midnight (common on phones) would keep
+   * highlighting the wrong day and mis-report "this week" — this signal is the
+   * dependency that lets those computeds roll over.
+   */
+  readonly today = signal(new Date());
+
   readonly isCurrentWeek = computed(
-    () => this.weekId() === toWeekId(mondayOf(new Date()))
+    () => this.weekId() === toWeekId(mondayOf(this.today()))
   );
+
+  constructor() {
+    const refreshIfDayChanged = (): void => {
+      const now = new Date();
+      if (toWeekId(now) !== toWeekId(this.today())) this.today.set(now);
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refreshIfDayChanged();
+      });
+    }
+    if (typeof setInterval === 'function') {
+      setInterval(refreshIfDayChanged, 60_000);
+    }
+  }
 
   /** e.g. "Jun 16 – Jun 22, 2026". */
   readonly rangeLabel = computed(() => {
@@ -125,7 +150,10 @@ export class WeekService {
                 this.weekEntries(user.uid, weekId),
                 orderBy('createdAt', 'desc')
               ),
-              { idField: 'id' }
+              // 'estimate' fills a just-added doc's pending server timestamp
+              // with a local estimate instead of null, so it sorts to the top
+              // immediately rather than jumping into place when the write lands.
+              { idField: 'id', serverTimestamps: 'estimate' }
             )
           : of(undefined)
       )
@@ -173,9 +201,7 @@ export class WeekService {
   }
 
   private requireUid(): string {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to log workouts.');
-    return uid;
+    return this.auth.requireUid('log workouts');
   }
 
   private weekEntries(uid: string, weekId: string) {

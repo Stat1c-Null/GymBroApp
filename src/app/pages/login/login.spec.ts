@@ -1,5 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  Router,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginComponent } from './login';
 import { AuthService } from '../../services/auth.service';
@@ -31,6 +36,7 @@ describe('LoginComponent', () => {
   };
   let navigate: ReturnType<typeof vi.spyOn>;
   let toast: { show: ReturnType<typeof vi.fn> };
+  let queryParams: Record<string, string>;
 
   beforeEach(async () => {
     authService = {
@@ -39,6 +45,7 @@ describe('LoginComponent', () => {
       resetPassword: vi.fn().mockResolvedValue(undefined),
     };
     toast = { show: vi.fn() };
+    queryParams = {};
 
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
@@ -46,13 +53,23 @@ describe('LoginComponent', () => {
         { provide: AuthService, useValue: authService },
         provideRouter([]),
         { provide: ToastService, useValue: toast },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              get queryParamMap() {
+                return convertToParamMap(queryParams);
+              },
+            },
+          },
+        },
       ],
     }).compileComponents();
 
     view = TestBed.createComponent(LoginComponent)
       .componentInstance as unknown as LoginView;
     navigate = vi
-      .spyOn(TestBed.inject(Router), 'navigate')
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
       .mockResolvedValue(true);
   });
 
@@ -75,8 +92,18 @@ describe('LoginComponent', () => {
         'user@example.com',
         'secret123'
       );
-      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+      expect(navigate).toHaveBeenCalledWith('/dashboard');
       expect(view.errorMessage()).toBe('');
+    });
+
+    it('returns to the guarded deep link after signing in', async () => {
+      queryParams = { returnUrl: '/weeks' };
+      view.email = 'user@example.com';
+      view.password = 'secret123';
+
+      await view.onSignIn();
+
+      expect(navigate).toHaveBeenCalledWith('/weeks');
     });
 
     it('surfaces the mapped error and stays on the page when sign-in fails', async () => {
@@ -99,7 +126,7 @@ describe('LoginComponent', () => {
       await view.onGoogleSignIn();
 
       expect(authService.signInWithGoogle).toHaveBeenCalled();
-      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+      expect(navigate).toHaveBeenCalledWith('/dashboard');
     });
 
     it('ignores a cancelled popup without showing an error', async () => {

@@ -9,6 +9,8 @@ import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
 interface SettingsView {
   toggleSetTime: () => Promise<void>;
   showSetTime: () => boolean;
+  requestDeleteGroup: (group: string) => void;
+  confirmDeleteGroup: () => Promise<void>;
 }
 
 describe('SettingsComponent', () => {
@@ -19,6 +21,8 @@ describe('SettingsComponent', () => {
     setShowSetTime: ReturnType<typeof vi.fn>;
     muscleGroups: () => string[];
     setMuscleGroups: ReturnType<typeof vi.fn>;
+    renameGroup: ReturnType<typeof vi.fn>;
+    deleteGroup: ReturnType<typeof vi.fn>;
   };
   let toast: { show: ReturnType<typeof vi.fn> };
 
@@ -29,6 +33,8 @@ describe('SettingsComponent', () => {
       setShowSetTime: vi.fn().mockResolvedValue(undefined),
       muscleGroups: () => [...MUSCLE_GROUPS],
       setMuscleGroups: vi.fn().mockResolvedValue(undefined),
+      renameGroup: vi.fn().mockResolvedValue(0),
+      deleteGroup: vi.fn().mockResolvedValue(0),
     };
     toast = { show: vi.fn() };
 
@@ -37,7 +43,7 @@ describe('SettingsComponent', () => {
       providers: [
         { provide: SettingsService, useValue: settings },
         { provide: ToastService, useValue: toast },
-        { provide: WorkoutService, useValue: { workouts: () => [], reassignMuscleGroup: vi.fn() } },
+        { provide: WorkoutService, useValue: { workouts: () => [] } },
       ],
     }).compileComponents();
 
@@ -63,5 +69,16 @@ describe('SettingsComponent', () => {
       'Could not save your setting. Please try again.',
       'error'
     );
+  });
+
+  it('delegates group deletion to the service even before workouts have loaded', async () => {
+    // workouts() is empty here (not yet loaded), so the old affectedCount gate
+    // would have skipped reassignment entirely. deleteGroup must still run.
+    view.requestDeleteGroup('Legs');
+
+    await view.confirmDeleteGroup();
+
+    expect(settings.deleteGroup).toHaveBeenCalledWith('Legs');
+    expect(toast.show).toHaveBeenCalledWith('"Legs" removed.', 'success');
   });
 });

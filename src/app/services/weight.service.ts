@@ -17,6 +17,13 @@ import { AuthService } from './auth.service';
 const LBS_PER_KG = 2.2046226218;
 
 /**
+ * Display unit for lifted weights across the app. A per-user kg/lbs preference
+ * isn't implemented yet; until it is, this single constant is the source of
+ * truth so the Weeks and Workouts pages stay in sync.
+ */
+export const WEIGHT_UNIT = 'lbs';
+
+/**
  * Convert a weight between kilograms and pounds. `from` names the unit of `value`,
  * so this single function handles both directions. Result rounded to 1 decimal.
  */
@@ -47,7 +54,9 @@ export class WeightService {
         user
           ? collectionData(
               query(this.userWeights(user.uid), orderBy('createdAt', 'desc')),
-              { idField: 'id' }
+              // Estimate pending server timestamps so a new entry doesn't
+              // briefly sort to the bottom before the write commits.
+              { idField: 'id', serverTimestamps: 'estimate' }
             )
           : of(undefined)
       )
@@ -56,8 +65,7 @@ export class WeightService {
   ) as () => WeightEntry[] | undefined;
 
   async add(data: Omit<WeightEntry, 'id' | 'createdAt'>): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to log your weight.');
+    const uid = this.auth.requireUid('log your weight');
     await addDoc(this.userWeights(uid), {
       ...data,
       createdAt: serverTimestamp(),
@@ -65,8 +73,7 @@ export class WeightService {
   }
 
   async remove(id: string): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to delete an entry.');
+    const uid = this.auth.requireUid('delete an entry');
     await deleteDoc(doc(this.firestore, 'users', uid, 'weights', id));
   }
 

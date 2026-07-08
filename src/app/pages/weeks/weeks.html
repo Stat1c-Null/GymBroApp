@@ -81,93 +81,80 @@
 </section>
 
 <!-- Add / Edit Workout Modal -->
-<div class="modal-overlay" [class.visible]="showModal()" (click)="closeModal()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <button class="modal-close" (click)="closeModal()" aria-label="Close modal">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+<app-modal [open]="showModal()" [title]="editingId() ? 'Edit Workout' : 'Add Workout'" (close)="closeModal()">
+  @if (error()) {
+    <div class="auth-error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round">
-        <path d="M18 6L6 18M6 6l12 12" />
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
       </svg>
-    </button>
+      {{ error() }}
+    </div>
+  }
 
-    <div class="modal-header">
-      <h2>{{ editingId() ? 'Edit Workout' : 'Add Workout' }}</h2>
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label class="form-label" for="week-muscle">Muscle group</label>
+      <select class="form-input" id="week-muscle" [ngModel]="modalMuscleGroup()"
+        (ngModelChange)="onMuscleGroupChange($event)" name="muscleGroup">
+        @for (group of muscleGroups(); track group) {
+          <option [value]="group">{{ group }}</option>
+        }
+      </select>
     </div>
 
-    @if (error()) {
-      <div class="auth-error">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
-        {{ error() }}
+    <div class="form-group">
+      <label class="form-label" for="week-workout">Workout</label>
+      @if (filteredWorkouts().length) {
+        <select class="form-input" id="week-workout" [ngModel]="modalWorkoutId()"
+          (ngModelChange)="onWorkoutChange($event)" name="workoutId">
+          <option value="" disabled>Select a workout…</option>
+          @for (w of filteredWorkouts(); track w.id) {
+            <option [value]="w.id">{{ w.name }}</option>
+          }
+        </select>
+      } @else {
+        <p class="form-hint">
+          No {{ modalMuscleGroup() }} workouts yet — add some on the
+          <a routerLink="/workouts" (click)="closeModal()">Workouts</a> page.
+        </p>
+      }
+    </div>
+
+    @if (modalWorkoutId()) {
+      <div class="form-group">
+        <label class="form-label" for="week-sets">Number of sets</label>
+        <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
+          [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
       </div>
     }
 
-    <form (ngSubmit)="onSubmit()">
-      <div class="form-group">
-        <label class="form-label" for="week-muscle">Muscle group</label>
-        <select class="form-input" id="week-muscle" [ngModel]="modalMuscleGroup()"
-          (ngModelChange)="onMuscleGroupChange($event)" name="muscleGroup">
-          @for (group of muscleGroups(); track group) {
-            <option [value]="group">{{ group }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="week-workout">Workout</label>
-        @if (filteredWorkouts().length) {
-          <select class="form-input" id="week-workout" [ngModel]="modalWorkoutId()"
-            (ngModelChange)="onWorkoutChange($event)" name="workoutId">
-            <option value="" disabled>Select a workout…</option>
-            @for (w of filteredWorkouts(); track w.id) {
-              <option [value]="w.id">{{ w.name }}</option>
+    @if (setRows().length) {
+      <div class="set-rows">
+        @for (s of setRows(); track $index) {
+          <div class="set-row" [class.with-time]="showSetTime()">
+            <span class="set-index">Set {{ $index + 1 }}</span>
+            <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
+              [name]="'reps' + $index" aria-label="Reps" />
+            <input class="form-input" type="number" min="0" placeholder="{{ unit }}" [(ngModel)]="s.weight"
+              [name]="'weight' + $index" aria-label="Weight" />
+            @if (showSetTime()) {
+              <input class="form-input" type="text" placeholder="m:ss"
+                [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
             }
-          </select>
-        } @else {
-          <p class="form-hint">
-            No {{ modalMuscleGroup() }} workouts yet — add some on the
-            <a routerLink="/workouts" (click)="closeModal()">Workouts</a> page.
-          </p>
+          </div>
         }
       </div>
+    }
 
-      @if (modalWorkoutId()) {
-        <div class="form-group">
-          <label class="form-label" for="week-sets">Number of sets</label>
-          <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
-            [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
-        </div>
+    <button type="submit" class="btn btn-primary btn-full mt-2" [disabled]="saving()">
+      @if (saving()) {
+        <span class="spinner"></span>
+        Saving...
+      } @else {
+        {{ editingId() ? 'Save Changes' : 'Add Workout' }}
       }
-
-      @if (setRows().length) {
-        <div class="set-rows">
-          @for (s of setRows(); track $index) {
-            <div class="set-row" [class.with-time]="showSetTime()">
-              <span class="set-index">Set {{ $index + 1 }}</span>
-              <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
-                [name]="'reps' + $index" aria-label="Reps" />
-              <input class="form-input" type="number" min="0" placeholder="{{ unit }}" [(ngModel)]="s.weight"
-                [name]="'weight' + $index" aria-label="Weight" />
-              @if (showSetTime()) {
-                <input class="form-input" type="text" placeholder="m:ss"
-                  [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
-              }
-            </div>
-          }
-        </div>
-      }
-
-      <button type="submit" class="btn btn-primary btn-full mt-2" [disabled]="saving()">
-        @if (saving()) {
-          <span class="spinner"></span>
-          Saving...
-        } @else {
-          {{ editingId() ? 'Save Changes' : 'Add Workout' }}
-        }
-      </button>
-    </form>
-  </div>
-</div>
+    </button>
+  </form>
+</app-modal>

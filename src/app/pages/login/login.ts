@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { AuthService, AuthError } from '../../services/auth.service';
+import { AuthService, AuthError, BENIGN_POPUP_CODES } from '../../services/auth.service';
 import { ToastService } from '../../services/toast.service';
 import { AuthLayoutComponent } from '../../components/auth-layout/auth-layout';
 import { PasswordInputComponent } from '../../components/password-input/password-input';
@@ -23,7 +23,14 @@ import { GoogleButtonComponent } from '../../components/google-button/google-but
 export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
+
+  /** Where to go after a successful sign-in: the guarded deep link the user
+   *  was sent here from, or the dashboard by default. */
+  private returnUrl(): string {
+    return this.route.snapshot.queryParamMap.get('returnUrl') || '/dashboard';
+  }
 
   // Form fields
   protected email = '';
@@ -40,6 +47,9 @@ export class LoginComponent {
   protected resetLoading = signal(false);
   protected resetMessage = signal('');
   protected resetError = signal('');
+  /** Handle for the success auto-close timer, so opening/closing the modal can
+   *  cancel a pending close from a previous send. */
+  private resetCloseTimer?: ReturnType<typeof setTimeout>;
 
   async onSignIn(): Promise<void> {
     if (!this.email || !this.password) {
@@ -52,7 +62,7 @@ export class LoginComponent {
 
     try {
       await this.authService.signIn(this.email, this.password);
-      this.router.navigate(['/dashboard']);
+      this.router.navigateByUrl(this.returnUrl());
     } catch (error: unknown) {
       this.errorMessage.set((error as AuthError).message);
     } finally {
@@ -66,10 +76,11 @@ export class LoginComponent {
 
     try {
       await this.authService.signInWithGoogle();
-      this.router.navigate(['/dashboard']);
+      this.router.navigateByUrl(this.returnUrl());
     } catch (error: unknown) {
       const authError = error as AuthError;
-      if (authError.code !== 'auth/popup-closed-by-user') {
+      // Closing or superseding the popup isn't a real failure — stay quiet.
+      if (!BENIGN_POPUP_CODES.includes(authError.code)) {
         this.errorMessage.set(authError.message);
       }
     } finally {
@@ -78,6 +89,7 @@ export class LoginComponent {
   }
 
   openResetModal(): void {
+    clearTimeout(this.resetCloseTimer);
     this.resetEmail = this.email; // Pre-fill with login email
     this.resetMessage.set('');
     this.resetError.set('');
@@ -85,6 +97,7 @@ export class LoginComponent {
   }
 
   closeResetModal(): void {
+    clearTimeout(this.resetCloseTimer);
     this.showResetModal.set(false);
   }
 
@@ -101,7 +114,7 @@ export class LoginComponent {
     try {
       await this.authService.resetPassword(this.resetEmail);
       this.resetMessage.set('Password reset email sent! Check your inbox.');
-      setTimeout(() => this.closeResetModal(), 2500);
+      this.resetCloseTimer = setTimeout(() => this.closeResetModal(), 2500);
       this.toast.show('Password reset email sent!', 'success');
     } catch (error: unknown) {
       this.resetError.set((error as AuthError).message);

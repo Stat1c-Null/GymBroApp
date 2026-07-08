@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
+import { ModalComponent } from '../../components/modal/modal';
 import {
   WeightService,
   WeightEntry,
@@ -11,7 +12,7 @@ import {
 @Component({
   selector: 'app-weights',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, ModalComponent],
   templateUrl: './weights.html',
   styleUrl: './weights.css',
 })
@@ -45,10 +46,23 @@ export class WeightsComponent {
       this.error.set('Enter a weight in kilograms or pounds.');
       return;
     }
+    if ((this.kg != null && this.kg <= 0) || (this.lbs != null && this.lbs <= 0)) {
+      this.error.set('Enter a weight greater than zero.');
+      return;
+    }
 
-    // Fill in whichever field the user left blank from the other.
-    const kg = this.kg ?? convertWeight(this.lbs as number, 'lbs');
-    const lbs = this.lbs ?? convertWeight(this.kg as number, 'kg');
+    // Derive one unit from the other so the stored pair is always consistent.
+    // If both are filled, kilograms wins (the first field) and pounds is
+    // recomputed — the form only asks for one unit anyway.
+    let kg: number;
+    let lbs: number;
+    if (this.kg != null) {
+      kg = this.kg;
+      lbs = convertWeight(this.kg, 'kg');
+    } else {
+      lbs = this.lbs as number;
+      kg = convertWeight(this.lbs as number, 'lbs');
+    }
 
     this.saving.set(true);
     this.error.set('');

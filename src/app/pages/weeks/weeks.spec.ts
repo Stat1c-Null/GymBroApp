@@ -25,6 +25,8 @@ interface WeeksView {
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
+  muscleGroups: () => string[];
+  filteredWorkouts: () => { id?: string }[];
 }
 
 const SAMPLE_WORKOUT = {
@@ -33,6 +35,16 @@ const SAMPLE_WORKOUT = {
   muscleGroup: 'Chest',
   usualWeight: 60,
   maxWeight: 80,
+};
+
+/** A workout whose muscle group is no longer in the user's list (e.g. the
+ *  group was deleted), so it lands in the reserved "Unassigned" bucket. */
+const ORPHAN_WORKOUT = {
+  id: 'w2',
+  name: 'Old Lift',
+  muscleGroup: 'Deleted Group',
+  usualWeight: 40,
+  maxWeight: 50,
 };
 
 describe('week.service date helpers', () => {
@@ -72,6 +84,7 @@ describe('WeeksComponent', () => {
     rangeLabel: () => string;
     isCurrentWeek: () => boolean;
     currentWeekStart: () => Date;
+    today: () => Date;
     previousWeek: ReturnType<typeof vi.fn>;
     nextWeek: ReturnType<typeof vi.fn>;
     goToThisWeek: ReturnType<typeof vi.fn>;
@@ -88,6 +101,7 @@ describe('WeeksComponent', () => {
       rangeLabel: () => 'Jun 16 – Jun 22, 2026',
       isCurrentWeek: () => true,
       currentWeekStart: () => new Date(2026, 5, 15),
+      today: () => new Date(2026, 5, 17),
       previousWeek: vi.fn(),
       nextWeek: vi.fn(),
       goToThisWeek: vi.fn(),
@@ -101,7 +115,7 @@ describe('WeeksComponent', () => {
       imports: [WeeksComponent],
       providers: [
         { provide: WeekService, useValue: service },
-        { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT] } },
+        { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT] } },
         { provide: ToastService, useValue: toast },
         { provide: SettingsService, useValue: { showSetTime: () => false, muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'] } },
       ],
@@ -120,6 +134,16 @@ describe('WeeksComponent', () => {
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.weight === 60)).toBe(true);
     expect(rows.every((r) => r.reps === null)).toBe(true);
+  });
+
+  it('offers the Unassigned bucket and its workouts when a group was deleted', () => {
+    view.openAddModal(0);
+
+    expect(view.muscleGroups()).toContain('Unassigned');
+
+    view.onMuscleGroupChange('Unassigned');
+
+    expect(view.filteredWorkouts().map((w) => w.id)).toEqual(['w2']);
   });
 
   it('keeps entered set data when the count field is cleared and retyped', () => {

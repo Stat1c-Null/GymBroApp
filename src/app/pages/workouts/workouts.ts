@@ -1,13 +1,15 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService, Workout } from '../../services/workout.service';
+import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WEIGHT_UNIT } from '../../services/weight.service';
 import { SettingsService } from '../../services/settings.service';
+import { ModalComponent } from '../../components/modal/modal';
 
 @Component({
   selector: 'app-workouts',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, ModalComponent],
   templateUrl: './workouts.html',
   styleUrl: './workouts.css',
 })
@@ -19,7 +21,7 @@ export class WorkoutsComponent {
   protected readonly workouts = this.service.workouts;
   protected readonly muscleGroupsForForm = computed(() => [
     ...this.settings.muscleGroups(),
-    'Unassigned',
+    UNASSIGNED_GROUP,
   ]);
 
   protected readonly groupedWorkouts = computed(() => {
@@ -31,7 +33,7 @@ export class WorkoutsComponent {
       .filter((g) => g.items.length > 0);
     const unassigned = list.filter((w) => !knownGroups.has(w.muscleGroup));
     if (unassigned.length > 0) {
-      result.push({ group: 'Unassigned', items: unassigned });
+      result.push({ group: UNASSIGNED_GROUP, items: unassigned });
     }
     return result;
   });
@@ -52,8 +54,7 @@ export class WorkoutsComponent {
     });
   }
 
-  // TODO: source from user settings once the Settings page exists.
-  protected readonly unit = 'lbs';
+  protected readonly unit = WEIGHT_UNIT;
 
   // Modal + form state
   protected readonly showModal = signal(false);

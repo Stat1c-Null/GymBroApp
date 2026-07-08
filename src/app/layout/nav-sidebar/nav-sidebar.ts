@@ -1,6 +1,7 @@
 import { Component, inject, input, output } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
-import { AuthService } from '../../services/auth.service';
+import { AuthService, AuthError } from '../../services/auth.service';
+import { ToastService } from '../../services/toast.service';
 import { ThemeToggleComponent } from '../../components/theme-toggle/theme-toggle';
 
 @Component({
@@ -13,6 +14,7 @@ import { ThemeToggleComponent } from '../../components/theme-toggle/theme-toggle
 export class NavSidebarComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly toast = inject(ToastService);
 
   readonly open = input(false);
   readonly close = output<void>();
@@ -27,7 +29,11 @@ export class NavSidebarComponent {
   }
 
   protected async onSignOut(): Promise<void> {
-    await this.authService.logout();
-    this.router.navigate(['/login']);
+    try {
+      await this.authService.logout();
+      this.router.navigate(['/login']);
+    } catch (error) {
+      this.toast.show((error as AuthError).message, 'error');
+    }
   }
 }

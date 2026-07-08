@@ -1,9 +1,9 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { Firestore, doc, docData, setDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, setDoc, writeBatch } from '@angular/fire/firestore';
 import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
-import { MUSCLE_GROUPS } from './workout.service';
+import { MUSCLE_GROUPS, UNASSIGNED_GROUP, WorkoutService } from './workout.service';
 
 /** Per-user app preferences. Extend here as more settings are added. */
 export interface UserSettings {
@@ -15,6 +15,7 @@ export interface UserSettings {
 export class SettingsService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(AuthService);
+  private readonly workouts = inject(WorkoutService);
 
   /**
    * The signed-in user's preferences, kept live via Firestore. `undefined` means
@@ -38,8 +39,7 @@ export class SettingsService {
   );
 
   async setShowSetTime(value: boolean): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to change settings.');
+    const uid = this.auth.requireUid('change settings');
     await setDoc(
       this.settingsDoc(uid),
       { showSetTime: value },
@@ -48,13 +48,49 @@ export class SettingsService {
   }
 
   async setMuscleGroups(groups: string[]): Promise<void> {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) throw new Error('You must be signed in to change settings.');
+    const uid = this.auth.requireUid('change settings');
     await setDoc(
       this.settingsDoc(uid),
       { muscleGroups: groups },
       { merge: true }
     );
+  }
+
+  /**
+   * Rename a muscle group: move every workout in `from` to `to` and update the
+   * group list, in a single atomic batch so the workout library and the group
+   * list can never disagree if the write is interrupted. Returns how many
+   * workouts were moved.
+   */
+  async renameGroup(from: string, to: string): Promise<number> {
+    const uid = this.auth.requireUid('change settings');
+    const current = this.muscleGroups();
+    const next = current.map((g) => (g === from ? to : g));
+    return this.commitGroupChange(uid, from, to, next);
+  }
+
+  /**
+   * Delete a muscle group: reassign its workouts to {@link UNASSIGNED_GROUP}
+   * and drop it from the group list, atomically. Returns how many workouts
+   * were reassigned.
+   */
+  async deleteGroup(group: string): Promise<number> {
+    const uid = this.auth.requireUid('change settings');
+    const next = this.muscleGroups().filter((g) => g !== group);
+    return this.commitGroupChange(uid, group, UNASSIGNED_GROUP, next);
+  }
+
+  private async commitGroupChange(
+    uid: string,
+    from: string,
+    to: string,
+    nextGroups: string[]
+  ): Promise<number> {
+    const batch = writeBatch(this.firestore);
+    const affected = await this.workouts.stageGroupReassign(batch, from, to);
+    batch.set(this.settingsDoc(uid), { muscleGroups: nextGroups }, { merge: true });
+    await batch.commit();
+    return affected;
   }
 
   private settingsDoc(uid: string) {

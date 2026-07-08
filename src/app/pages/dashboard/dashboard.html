@@ -7,8 +7,14 @@
       </div>
       <h1 class="welcome-title">Welcome, {{ authService.displayName() }}! 💪</h1>
       <p class="welcome-subtitle">
-        You're all set! The workout tracker is coming soon.
+        Ready to train? Plan this week's sessions, manage your exercise library,
+        or log your body weight.
       </p>
+      <div class="dashboard-links">
+        <a class="btn btn-primary" routerLink="/weeks">This Week</a>
+        <a class="btn btn-secondary" routerLink="/workouts">Workouts</a>
+        <a class="btn btn-secondary" routerLink="/weights">Weight</a>
+      </div>
     </div>
   </div>
 </div>

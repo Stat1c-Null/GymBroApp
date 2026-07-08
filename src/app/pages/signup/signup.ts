@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { AuthService, AuthError } from '../../services/auth.service';
+import { AuthService, AuthError, BENIGN_POPUP_CODES } from '../../services/auth.service';
 import { AuthLayoutComponent } from '../../components/auth-layout/auth-layout';
 import { PasswordInputComponent } from '../../components/password-input/password-input';
 import { GoogleButtonComponent } from '../../components/google-button/google-button';
@@ -99,7 +99,8 @@ export class SignupComponent {
       this.router.navigate(['/dashboard']);
     } catch (error: unknown) {
       const authError = error as AuthError;
-      if (authError.code !== 'auth/popup-closed-by-user') {
+      // Closing or superseding the popup isn't a real failure — stay quiet.
+      if (!BENIGN_POPUP_CODES.includes(authError.code)) {
         this.errorMessage.set(authError.message);
       }
     } finally {

@@ -87,6 +87,30 @@ describe('WeightsComponent', () => {
     expect(view.error()).toBeTruthy();
   });
 
+  it('rejects a zero or negative weight', async () => {
+    view.kg = 0;
+    view.lbs = null;
+
+    await view.onSubmit();
+
+    expect(service.add).not.toHaveBeenCalled();
+    expect(view.error()).toBeTruthy();
+
+    view.kg = -5;
+    await view.onSubmit();
+
+    expect(service.add).not.toHaveBeenCalled();
+  });
+
+  it('derives pounds from kilograms when both are entered, so they never disagree', async () => {
+    view.kg = 100;
+    view.lbs = 999; // inconsistent — kg is canonical
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith({ kg: 100, lbs: 220.5 });
+  });
+
   it('deletes an entry once the user confirms', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 

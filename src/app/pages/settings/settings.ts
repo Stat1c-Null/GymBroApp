@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService } from '../../services/workout.service';
+import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
 
 @Component({
   selector: 'app-settings',
@@ -48,8 +48,8 @@ export class SettingsComponent {
   protected async addGroup(): Promise<void> {
     const name = this.newGroupName.trim();
     if (!name) return;
-    if (name.toLowerCase() === 'unassigned') {
-      this.toast.show('"Unassigned" is reserved and cannot be used.', 'error');
+    if (name.toLowerCase() === UNASSIGNED_GROUP.toLowerCase()) {
+      this.toast.show(`"${UNASSIGNED_GROUP}" is reserved and cannot be used.`, 'error');
       return;
     }
     const current = this.settings.muscleGroups();
@@ -91,8 +91,8 @@ export class SettingsComponent {
       this.editingGroup.set(null);
       return;
     }
-    if (newName.toLowerCase() === 'unassigned') {
-      this.toast.show('"Unassigned" is reserved and cannot be used.', 'error');
+    if (newName.toLowerCase() === UNASSIGNED_GROUP.toLowerCase()) {
+      this.toast.show(`"${UNASSIGNED_GROUP}" is reserved and cannot be used.`, 'error');
       return;
     }
     const current = this.settings.muscleGroups();
@@ -102,10 +102,7 @@ export class SettingsComponent {
     }
     this.renamingGroup.set(true);
     try {
-      await this.workoutService.renameGroup(oldName, newName);
-      await this.settings.setMuscleGroups(
-        current.map((g) => (g === oldName ? newName : g))
-      );
+      await this.settings.renameGroup(oldName, newName);
       this.editingGroup.set(null);
     } catch {
       this.toast.show('Could not rename group. Please try again.', 'error');
@@ -124,12 +121,9 @@ export class SettingsComponent {
     if (!group) return;
     this.managingGroups.set(true);
     try {
-      if (this.affectedCount() > 0) {
-        await this.workoutService.reassignMuscleGroup(group);
-      }
-      await this.settings.setMuscleGroups(
-        this.settings.muscleGroups().filter((g) => g !== group)
-      );
+      // deleteGroup reassigns affected workouts (queried server-side) and drops
+      // the group from the list in one atomic batch.
+      await this.settings.deleteGroup(group);
       this.pendingDeleteGroup.set(null);
       this.toast.show(`"${group}" removed.`, 'success');
     } catch {

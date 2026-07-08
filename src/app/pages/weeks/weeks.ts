@@ -4,7 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
-import { WorkoutService } from '../../services/workout.service';
+import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WEIGHT_UNIT } from '../../services/weight.service';
+import { ModalComponent } from '../../components/modal/modal';
 import {
   WeekService,
   WeekEntry,
@@ -25,7 +27,7 @@ interface SetRow {
 @Component({
   selector: 'app-weeks',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, ModalComponent],
   templateUrl: './weeks.html',
   styleUrl: './weeks.css',
 })
@@ -35,13 +37,22 @@ export class WeeksComponent {
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
 
-  protected readonly muscleGroups = computed(() => this.settings.muscleGroups());
+  /** Groups offered in the modal's dropdown. Adds the reserved "Unassigned"
+   *  bucket when the library holds workouts whose group was deleted, so those
+   *  workouts remain loggable instead of becoming unreachable. */
+  protected readonly muscleGroups = computed(() => {
+    const groups = this.settings.muscleGroups();
+    const known = new Set(groups);
+    const hasUnassigned = (this.workoutService.workouts() ?? []).some(
+      (w) => !known.has(w.muscleGroup)
+    );
+    return hasUnassigned ? [...groups, UNASSIGNED_GROUP] : groups;
+  });
 
   /** When on, each set row shows an m:ss time field (Settings page toggle). */
   protected readonly showSetTime = this.settings.showSetTime;
 
-  // TODO: source from user settings once the Settings page exists.
-  protected readonly unit = 'lbs';
+  protected readonly unit = WEIGHT_UNIT;
 
   // --- Week state (delegated to the service) ---
   protected readonly entries = this.service.entries;
@@ -54,7 +65,7 @@ export class WeeksComponent {
   /** The 7 day columns for the current week. */
   protected readonly days = computed(() => {
     const start = this.service.currentWeekStart();
-    const todayId = toWeekId(new Date());
+    const todayId = toWeekId(this.service.today());
     return DAY_LABELS.map((label, i) => {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
@@ -85,12 +96,18 @@ export class WeeksComponent {
    *  rows instead of destroying their data. Only visible rows are saved. */
   private rowPool: SetRow[] = [];
 
-  /** Library workouts in the modal's selected muscle group. */
-  protected readonly filteredWorkouts = computed(() =>
-    (this.workoutService.workouts() ?? []).filter(
-      (w) => w.muscleGroup === this.modalMuscleGroup()
-    )
-  );
+  /** Library workouts in the modal's selected muscle group. When "Unassigned"
+   *  is selected, matches any workout whose group is no longer in the user's
+   *  list (mirrors the Workouts page's grouping). */
+  protected readonly filteredWorkouts = computed(() => {
+    const group = this.modalMuscleGroup();
+    const all = this.workoutService.workouts() ?? [];
+    if (group === UNASSIGNED_GROUP) {
+      const known = new Set(this.settings.muscleGroups());
+      return all.filter((w) => !known.has(w.muscleGroup));
+    }
+    return all.filter((w) => w.muscleGroup === group);
+  });
 
   private readonly selectedWorkout = computed(
     () => this.filteredWorkouts().find((w) => w.id === this.modalWorkoutId()) ?? null

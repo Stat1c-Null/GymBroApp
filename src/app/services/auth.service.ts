@@ -18,6 +18,15 @@ export interface AuthError {
   message: string;
 }
 
+/**
+ * Google popup error codes that mean the user simply dismissed the popup or a
+ * newer popup superseded this one — benign, so the UI should stay silent.
+ */
+export const BENIGN_POPUP_CODES = [
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+];
+
 @Injectable({ providedIn: 'root' })
 export class AuthService implements OnDestroy {
   private readonly auth = inject(Auth);
@@ -40,6 +49,23 @@ export class AuthService implements OnDestroy {
 
   ngOnDestroy(): void {
     this.unsubscribe();
+  }
+
+  /**
+   * Returns the signed-in user's uid, or throws a user-facing error. `action`
+   * completes the sentence "You must be signed in to {action}." — omit it for
+   * the generic message.
+   */
+  requireUid(action?: string): string {
+    const uid = this.currentUser()?.uid;
+    if (!uid) {
+      throw new Error(
+        action
+          ? `You must be signed in to ${action}.`
+          : 'You must be signed in.'
+      );
+    }
+    return uid;
   }
 
   async signUp(
@@ -107,6 +133,9 @@ export class AuthService implements OnDestroy {
       'auth/too-many-requests':
         'Too many failed attempts. Please try again later.',
       'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
+      'auth/cancelled-popup-request': 'Google sign-in was cancelled.',
+      'auth/popup-blocked':
+        'Your browser blocked the sign-in popup. Allow popups for this site and try again.',
       'auth/network-request-failed':
         'Network error. Check your connection and try again.',
     };
