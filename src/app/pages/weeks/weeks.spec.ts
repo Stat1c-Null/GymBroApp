@@ -22,6 +22,8 @@ interface WeeksView {
   onSetsCountChange: (value: number | null) => void;
   onSubmit: () => Promise<void>;
   onDelete: (entry: WeekEntry) => Promise<void>;
+  toggleModalTrackTime: () => void;
+  modalTrackTime: () => boolean;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
@@ -188,6 +190,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      trackTime: false,
       sets: [
         { reps: 10, weight: 60, time: null },
         { reps: 10, weight: 60, time: null },
@@ -197,8 +200,10 @@ describe('WeeksComponent', () => {
     expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
   });
 
-  it('parses an entered m:ss time into seconds on submit', async () => {
+  it('parses an entered m:ss time into seconds on submit when tracking is on', async () => {
     view.openAddModal(0);
+    view.toggleModalTrackTime(); // setting defaults off in this suite; turn it on
+    expect(view.modalTrackTime()).toBe(true);
     view.onWorkoutChange('w1');
     view.onSetsCountChange(1);
     view.setRows()[0].reps = 8;
@@ -211,7 +216,28 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      trackTime: true,
       sets: [{ reps: 8, weight: 60, time: 90 }],
+    });
+  });
+
+  it('clears set times when tracking is off, even if text was entered', async () => {
+    view.openAddModal(0); // setting defaults off in this suite
+    expect(view.modalTrackTime()).toBe(false);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(1);
+    view.setRows()[0].reps = 8;
+    view.setRows()[0].timeText = '1:30';
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith({
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      trackTime: false,
+      sets: [{ reps: 8, weight: 60, time: null }],
     });
   });
 
@@ -260,10 +286,38 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      trackTime: false,
       sets: [{ reps: 12, weight: 60, time: null }],
     });
     expect(service.add).not.toHaveBeenCalled();
     expect(toast.show).toHaveBeenCalledWith('Workout updated!', 'success');
+  });
+
+  it('restores tracking for a legacy entry (no trackTime) that has set times', async () => {
+    const entry: WeekEntry = {
+      id: 'legacy',
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      sets: [{ reps: 10, weight: 60, time: 90 }],
+    };
+    entriesData = [entry];
+
+    view.openEditModal(entry);
+    // No trackTime field, but a set has a time → tracking defaults on.
+    expect(view.modalTrackTime()).toBe(true);
+
+    await view.onSubmit();
+
+    expect(service.update).toHaveBeenCalledWith('legacy', {
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      trackTime: true,
+      sets: [{ reps: 10, weight: 60, time: 90 }],
+    });
   });
 
   it('deletes an entry once the user confirms', async () => {

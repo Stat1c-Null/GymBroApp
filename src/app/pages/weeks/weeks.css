@@ -135,6 +135,15 @@
   color: var(--text-muted);
 }
 
+/* Label for the in-modal "Track time per set" toggle. The .setting-item card
+   and switch styles are global; only this label needs styling since
+   .setting-text is scoped to the Settings page. */
+.modal-toggle-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .set-rows {
   display: flex;
   flex-direction: column;

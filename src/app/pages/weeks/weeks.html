@@ -128,18 +128,27 @@
         <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
           [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
       </div>
+
+      <div class="form-group setting-item">
+        <span class="modal-toggle-label">Track time per set</span>
+        <button type="button" class="theme-switch" [class.active]="modalTrackTime()"
+          (click)="toggleModalTrackTime()" [attr.aria-pressed]="modalTrackTime()"
+          aria-label="Toggle time tracking for this workout">
+          <span class="switch-knob"></span>
+        </button>
+      </div>
     }
 
     @if (setRows().length) {
       <div class="set-rows">
         @for (s of setRows(); track $index) {
-          <div class="set-row" [class.with-time]="showSetTime()">
+          <div class="set-row" [class.with-time]="modalTrackTime()">
             <span class="set-index">Set {{ $index + 1 }}</span>
             <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
               [name]="'reps' + $index" aria-label="Reps" />
             <input class="form-input" type="number" min="0" placeholder="{{ unit }}" [(ngModel)]="s.weight"
               [name]="'weight' + $index" aria-label="Weight" />
-            @if (showSetTime()) {
+            @if (modalTrackTime()) {
               <input class="form-input" type="text" placeholder="m:ss"
                 [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
             }

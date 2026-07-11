@@ -64,6 +64,7 @@ export interface WeekEntry {
   workoutId: string; // ref into the library
   workoutName: string; // denormalized (survives library rename/delete)
   muscleGroup: MuscleGroup; // denormalized
+  trackTime?: boolean; // per-entry time-per-set tracking (older entries lack it)
   sets: WorkoutSet[]; // length = number of sets
   createdAt?: unknown; // Firestore serverTimestamp → newest on top
 }

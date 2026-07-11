@@ -10,7 +10,7 @@
         stroke-linecap="round">
         <path d="M12 5v14M5 12h14" />
       </svg>
-      Add Workout
+      Create Workout
     </button>
   </div>
 
@@ -78,7 +78,7 @@
 </section>
 
 <!-- Add Workout Modal -->
-<app-modal [open]="showModal()" [title]="editingId() ? 'Edit Workout' : 'Add Workout'" (close)="closeModal()">
+<app-modal [open]="showModal()" [title]="editingId() ? 'Edit Workout' : 'Create Workout'" (close)="closeModal()">
   @if (error()) {
     <div class="auth-error">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

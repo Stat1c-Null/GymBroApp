@@ -49,8 +49,10 @@ export class WeeksComponent {
     return hasUnassigned ? [...groups, UNASSIGNED_GROUP] : groups;
   });
 
-  /** When on, each set row shows an m:ss time field (Settings page toggle). */
-  protected readonly showSetTime = this.settings.showSetTime;
+  /** Per-workout time tracking for the open modal. Defaults from the global
+   *  "Track time per set" setting when adding, or the entry's saved value when
+   *  editing. When on, each set row shows an m:ss time field. */
+  protected readonly modalTrackTime = signal(false);
 
   protected readonly unit = WEIGHT_UNIT;
 
@@ -118,6 +120,7 @@ export class WeeksComponent {
     this.activeDay.set(day);
     this.modalMuscleGroup.set(this.settings.muscleGroups()[0] ?? '');
     this.modalWorkoutId.set('');
+    this.modalTrackTime.set(this.settings.showSetTime());
     this.rowPool = [];
     this.setRows.set([]);
     this.error.set('');
@@ -129,6 +132,9 @@ export class WeeksComponent {
     this.activeDay.set(entry.day);
     this.modalMuscleGroup.set(entry.muscleGroup);
     this.modalWorkoutId.set(entry.workoutId);
+    this.modalTrackTime.set(
+      entry.trackTime ?? entry.sets.some((s) => s.time != null)
+    );
     this.rowPool = entry.sets.map((s) => ({
       reps: s.reps,
       weight: s.weight,
@@ -137,6 +143,10 @@ export class WeeksComponent {
     this.setRows.set(this.rowPool.slice());
     this.error.set('');
     this.showModal.set(true);
+  }
+
+  protected toggleModalTrackTime(): void {
+    this.modalTrackTime.update((v) => !v);
   }
 
   protected closeModal(): void {
@@ -198,15 +208,17 @@ export class WeeksComponent {
 
     this.saving.set(true);
     this.error.set('');
+    const trackTime = this.modalTrackTime();
     const data = {
       day,
       workoutId: workout.id,
       workoutName: workout.name,
       muscleGroup: workout.muscleGroup,
+      trackTime,
       sets: sets.map((s) => ({
         reps: s.reps,
         weight: s.weight ?? null,
-        time: parseTime(s.timeText),
+        time: trackTime ? parseTime(s.timeText) : null,
       })),
     };
     const id = this.editingId();
