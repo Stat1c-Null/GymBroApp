@@ -1,0 +1,51 @@
+<app-modal [open]="open()" [title]="isEditing() ? 'Edit Workout' : 'Create Workout'" (close)="close.emit()">
+  @if (error()) {
+    <div class="auth-error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+      {{ error() }}
+    </div>
+  }
+
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label class="form-label" for="workout-name">Name</label>
+      <input class="form-input" id="workout-name" type="text" placeholder="e.g. Bench Press"
+        [(ngModel)]="name" name="name" autocomplete="off" required />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="workout-muscle">Muscle group</label>
+      <select class="form-input" id="workout-muscle" [(ngModel)]="muscleGroup" name="muscleGroup">
+        @for (group of muscleGroupsForForm(); track group) {
+          <option [value]="group">{{ group }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="workout-usual">Usual weight ({{ unit }})</label>
+        <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
+          [(ngModel)]="usualWeight" name="usualWeight" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="workout-max">Max weight ({{ unit }})</label>
+        <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
+          [(ngModel)]="maxWeight" name="maxWeight" />
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full mt-2" id="save-workout-btn" [disabled]="saving()">
+      @if (saving()) {
+        <span class="spinner"></span>
+        Saving...
+      } @else {
+        {{ isEditing() ? 'Save Changes' : 'Save Workout' }}
+      }
+    </button>
+  </form>
+</app-modal>

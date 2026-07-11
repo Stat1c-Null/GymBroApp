@@ -24,10 +24,17 @@ interface WeeksView {
   onDelete: (entry: WeekEntry) => Promise<void>;
   toggleModalTrackTime: () => void;
   modalTrackTime: () => boolean;
+  onWorkoutCreated: (workout: {
+    id?: string;
+    muscleGroup: string;
+    usualWeight: number | null;
+  }) => void;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
   muscleGroups: () => string[];
+  modalMuscleGroup: () => string;
+  modalWorkoutId: () => string;
   filteredWorkouts: () => { id?: string }[];
 }
 
@@ -318,6 +325,21 @@ describe('WeeksComponent', () => {
       trackTime: true,
       sets: [{ reps: 10, weight: 60, time: 90 }],
     });
+  });
+
+  it('selects a newly created workout in the add-to-week form', () => {
+    view.openAddModal(0); // group defaults to 'Chest'
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(2);
+
+    view.onWorkoutCreated({ id: 'new-w', muscleGroup: 'Back', usualWeight: 50 });
+
+    // The new workout's group + id are selected, and the in-progress set rows
+    // are preserved (not wiped by a group change).
+    expect(view.modalMuscleGroup()).toBe('Back');
+    expect(view.modalWorkoutId()).toBe('new-w');
+    expect(view.setRows()).toHaveLength(2);
+    expect(view.setRows().every((r) => r.weight === 50)).toBe(true);
   });
 
   it('deletes an entry once the user confirms', async () => {

@@ -64,12 +64,13 @@ export class WorkoutService {
     { initialValue: undefined }
   ) as () => Workout[] | undefined;
 
-  async add(data: Omit<Workout, 'id' | 'createdAt'>): Promise<void> {
+  async add(data: Omit<Workout, 'id' | 'createdAt'>): Promise<string> {
     const uid = this.auth.requireUid('add a workout');
-    await addDoc(this.userWorkouts(uid), {
+    const ref = await addDoc(this.userWorkouts(uid), {
       ...data,
       createdAt: serverTimestamp(),
     });
+    return ref.id;
   }
 
   async update(

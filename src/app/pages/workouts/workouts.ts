@@ -1,15 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
 import { WEIGHT_UNIT } from '../../services/weight.service';
 import { SettingsService } from '../../services/settings.service';
-import { ModalComponent } from '../../components/modal/modal';
+import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 
 @Component({
   selector: 'app-workouts',
   standalone: true,
-  imports: [FormsModule, ModalComponent],
+  imports: [WorkoutFormModalComponent],
   templateUrl: './workouts.html',
   styleUrl: './workouts.css',
 })
@@ -19,10 +18,6 @@ export class WorkoutsComponent {
   private readonly toast = inject(ToastService);
 
   protected readonly workouts = this.service.workouts;
-  protected readonly muscleGroupsForForm = computed(() => [
-    ...this.settings.muscleGroups(),
-    UNASSIGNED_GROUP,
-  ]);
 
   protected readonly groupedWorkouts = computed(() => {
     const list = this.workouts() ?? [];
@@ -56,64 +51,19 @@ export class WorkoutsComponent {
 
   protected readonly unit = WEIGHT_UNIT;
 
-  // Modal + form state
-  protected readonly showModal = signal(false);
-  protected readonly saving = signal(false);
-  protected readonly error = signal('');
-  /** null = adding a new workout; a string id = editing that workout. */
-  protected readonly editingId = signal<string | null>(null);
-
-  protected name = '';
-  protected muscleGroup = '';
-  protected usualWeight: number | null = null;
-  protected maxWeight: number | null = null;
+  // Shared create/edit-workout modal state.
+  protected readonly modalOpen = signal(false);
+  /** null = adding a new workout; a workout = editing it. */
+  protected readonly editingWorkout = signal<Workout | null>(null);
 
   /** Open the modal — pass a workout to edit it, or nothing to add a new one. */
   protected openModal(workout?: Workout): void {
-    this.editingId.set(workout?.id ?? null);
-    this.name = workout?.name ?? '';
-    this.muscleGroup = workout?.muscleGroup ?? (this.settings.muscleGroups()[0] ?? '');
-    this.usualWeight = workout?.usualWeight ?? null;
-    this.maxWeight = workout?.maxWeight ?? null;
-    this.error.set('');
-    this.showModal.set(true);
+    this.editingWorkout.set(workout ?? null);
+    this.modalOpen.set(true);
   }
 
   protected closeModal(): void {
-    this.showModal.set(false);
-  }
-
-  protected async onSubmit(): Promise<void> {
-    if (!this.name.trim()) {
-      this.error.set('Please enter a workout name.');
-      return;
-    }
-
-    this.saving.set(true);
-    this.error.set('');
-
-    const data = {
-      name: this.name.trim(),
-      muscleGroup: this.muscleGroup,
-      usualWeight: this.usualWeight ?? null,
-      maxWeight: this.maxWeight ?? null,
-    };
-    const id = this.editingId();
-
-    try {
-      if (id) {
-        await this.service.update(id, data);
-        this.toast.show('Workout updated!', 'success');
-      } else {
-        await this.service.add(data);
-        this.toast.show('Workout added!', 'success');
-      }
-      this.closeModal();
-    } catch {
-      this.error.set('Could not save your workout. Please try again.');
-    } finally {
-      this.saving.set(false);
-    }
+    this.modalOpen.set(false);
   }
 
   protected async onDelete(workout: Workout): Promise<void> {

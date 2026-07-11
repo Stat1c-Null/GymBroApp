@@ -13,17 +13,11 @@ interface WorkoutLike {
   maxWeight?: number | null;
 }
 
-/** Typed window onto WorkoutsComponent's `protected` members. */
+/** Typed window onto WorkoutsComponent's `protected` members. The create/edit
+ *  form now lives in WorkoutFormModalComponent (see its own spec); this page
+ *  only owns the list, grouping, and delete. */
 interface WorkoutsView {
-  name: string;
-  muscleGroup: string;
-  usualWeight: number | null;
-  maxWeight: number | null;
-  openModal: (workout?: WorkoutLike) => void;
-  onSubmit: () => Promise<void>;
   onDelete: (workout: WorkoutLike) => Promise<void>;
-  error: () => string;
-  editingId: () => string | null;
   groupedWorkouts: () => { group: string; items: WorkoutLike[] }[];
   isExpanded: (group: string) => boolean;
   toggleGroup: (group: string) => void;
@@ -61,55 +55,6 @@ describe('WorkoutsComponent', () => {
 
     view = TestBed.createComponent(WorkoutsComponent)
       .componentInstance as unknown as WorkoutsView;
-  });
-
-  it('saves a valid workout and shows a toast', async () => {
-    view.name = 'Bench Press';
-    view.muscleGroup = 'Chest';
-    view.usualWeight = 60;
-    view.maxWeight = 80;
-
-    await view.onSubmit();
-
-    expect(service.add).toHaveBeenCalledWith({
-      name: 'Bench Press',
-      muscleGroup: 'Chest',
-      usualWeight: 60,
-      maxWeight: 80,
-    });
-    expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
-  });
-
-  it('rejects an empty name without calling the service', async () => {
-    view.name = '   ';
-
-    await view.onSubmit();
-
-    expect(service.add).not.toHaveBeenCalled();
-    expect(view.error()).toBeTruthy();
-  });
-
-  it('updates an existing workout when opened in edit mode', async () => {
-    view.openModal({
-      id: 'abc123',
-      name: 'Squat',
-      muscleGroup: 'Legs',
-      usualWeight: 90,
-      maxWeight: 120,
-    });
-    expect(view.editingId()).toBe('abc123');
-
-    view.maxWeight = 140;
-    await view.onSubmit();
-
-    expect(service.update).toHaveBeenCalledWith('abc123', {
-      name: 'Squat',
-      muscleGroup: 'Legs',
-      usualWeight: 90,
-      maxWeight: 140,
-    });
-    expect(service.add).not.toHaveBeenCalled();
-    expect(toast.show).toHaveBeenCalledWith('Workout updated!', 'success');
   });
 
   it('deletes a workout once the user confirms', async () => {

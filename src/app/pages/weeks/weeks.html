@@ -102,6 +102,9 @@
           <option [value]="group">{{ group }}</option>
         }
       </select>
+      <button type="button" class="create-workout-link" (click)="openCreateWorkout()">
+        + Create new workout
+      </button>
     </div>
 
     <div class="form-group">
@@ -116,8 +119,7 @@
         </select>
       } @else {
         <p class="form-hint">
-          No {{ modalMuscleGroup() }} workouts yet — add some on the
-          <a routerLink="/workouts" (click)="closeModal()">Workouts</a> page.
+          No {{ modalMuscleGroup() }} workouts yet — use “Create new workout” above.
         </p>
       }
     </div>
@@ -167,3 +169,7 @@
     </button>
   </form>
 </app-modal>
+
+<!-- "Create new workout" modal, layered over the add-to-week modal -->
+<app-workout-form-modal [open]="showCreateWorkout()" [presetGroup]="modalMuscleGroup()"
+  (close)="showCreateWorkout.set(false)" (saved)="onWorkoutCreated($event)" />

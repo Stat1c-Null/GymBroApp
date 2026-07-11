@@ -144,6 +144,23 @@
   color: var(--text-primary);
 }
 
+/* Inline "Create new workout" link under the muscle-group select — a plain
+   text button (no button chrome) that opens the shared create-workout modal. */
+.create-workout-link {
+  margin-top: 0.4rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  cursor: pointer;
+}
+
+.create-workout-link:hover {
+  text-decoration: underline;
+}
+
 .set-rows {
   display: flex;
   flex-direction: column;

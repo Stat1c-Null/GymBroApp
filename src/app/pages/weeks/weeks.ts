@@ -1,12 +1,12 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
-import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
 import { WEIGHT_UNIT } from '../../services/weight.service';
 import { ModalComponent } from '../../components/modal/modal';
+import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 import {
   WeekService,
   WeekEntry,
@@ -27,7 +27,7 @@ interface SetRow {
 @Component({
   selector: 'app-weeks',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePipe, ModalComponent],
+  imports: [FormsModule, DatePipe, ModalComponent, WorkoutFormModalComponent],
   templateUrl: './weeks.html',
   styleUrl: './weeks.css',
 })
@@ -151,6 +151,26 @@ export class WeeksComponent {
 
   protected closeModal(): void {
     this.showModal.set(false);
+  }
+
+  // --- "Create new workout" sub-modal (layered over the add-to-week modal) ---
+  protected readonly showCreateWorkout = signal(false);
+
+  protected openCreateWorkout(): void {
+    this.showCreateWorkout.set(true);
+  }
+
+  /** After a workout is created from within the logging flow, select it in the
+   *  add-to-week form. Sets the group/workout signals directly (not via
+   *  onMuscleGroupChange) so the in-progress set rows are preserved. The new
+   *  workout appears in filteredWorkouts() once the live library stream emits. */
+  protected onWorkoutCreated(workout: Workout): void {
+    this.showCreateWorkout.set(false);
+    this.modalMuscleGroup.set(workout.muscleGroup);
+    this.modalWorkoutId.set(workout.id ?? '');
+    const weight = workout.usualWeight ?? null;
+    this.rowPool = this.rowPool.map((r) => ({ ...r, weight }));
+    this.setRows.set(this.rowPool.slice(0, this.setRows().length));
   }
 
   protected onMuscleGroupChange(group: string): void {
