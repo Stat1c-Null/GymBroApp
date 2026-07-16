@@ -1,5 +1,15 @@
 # GymBroApp — Project Instructions
 
+## Wiki — read this first
+
+Before making non-trivial changes, consult `.claude/wiki/` for how this
+codebase is put together: architecture, the Firestore data model, a
+feature-by-feature breakdown of how things interact, the component/service
+catalog, and the shared CSS design system. Start at `.claude/wiki/README.md`.
+When a change alters something the wiki documents (new route/collection/
+shared component/data shape), update the relevant wiki page in the same
+change so it doesn't drift out of date.
+
 ## Changelog workflow
 
 Whenever the user says something like "I am deploying" (or clearly indicates
