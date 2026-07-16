@@ -52,6 +52,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/settings/settings').then((m) => m.SettingsComponent),
       },
+      {
+        path: 'changelog',
+        loadComponent: () =>
+          import('./pages/changelog/changelog').then(
+            (m) => m.ChangelogComponent
+          ),
+      },
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
     ],
   },

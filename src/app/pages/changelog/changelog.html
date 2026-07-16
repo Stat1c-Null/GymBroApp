@@ -1,0 +1,12 @@
+<section class="page">
+  <h1 class="page-title">Changelog</h1>
+  <p class="page-subtitle">What's new, and what's shipped in past deployments.</p>
+
+  <div class="changelog-list">
+    @for (entry of entries; track entry.version) {
+      <app-changelog-entry [version]="entry.version" [date]="entry.date" [changes]="entry.changes" />
+    } @empty {
+      <p class="list-empty">No changes recorded yet.</p>
+    }
+  </div>
+</section>
