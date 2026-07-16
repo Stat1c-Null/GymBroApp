@@ -47,11 +47,22 @@ One document per user (`SettingsService`). Shape (`UserSettings`):
 {
   showSetTime: boolean;        // default false — see Features → Settings
   muscleGroups?: string[];     // default MUSCLE_GROUPS constant if unset
+  unit?: 'kg' | 'lbs';         // display unit; default 'lbs' — see below
+  weightGoal?: WeightGoal | null;  // body-weight target driving /analytics
+}
+
+// weightGoal, when set:
+{
+  startLbs: number;  startKg: number;  startDate: string;   // local YYYY-MM-DD
+  targetLbs: number; targetKg: number; targetDate: string;  // local YYYY-MM-DD
 }
 ```
 
 Written with `setDoc(..., { merge: true })`, so each setting can be updated
-independently without clobbering the other.
+independently without clobbering the others. `weightGoal` is always written as a
+**complete** object — a partial merge could pair one goal's start with another's
+target. Clearing it writes `weightGoal: null` rather than deleting the field,
+because `merge: true` cannot remove a field; readers treat null and missing alike.
 
 ### `users/{uid}/workouts/{workoutId}`
 
@@ -62,7 +73,7 @@ The user's exercise library (`WorkoutService`). Shape (`Workout`):
   name: string;
   muscleGroup: string;          // free-form string, validated against
                                  // settings.muscleGroups at the UI layer only
-  usualWeight: number | null;   // in WEIGHT_UNIT ('lbs') — see below
+  usualWeight: number | null;   // ALWAYS pounds — see Weight unit handling
   maxWeight: number | null;
   createdAt: Timestamp;         // serverTimestamp()
 }
@@ -156,12 +167,35 @@ a group literally named "Unassigned" (checked case-insensitively in
 
 ## Weight unit handling
 
-`WEIGHT_UNIT = 'lbs'` (`weight.service.ts`) is a single hardcoded constant —
-**there is no per-user kg/lbs preference yet**, despite `WeightEntry` storing
-both units on every document. The dual storage exists only so the Weights
-page can show both without a live conversion; `usualWeight`/`maxWeight` on
-`Workout` and `WorkoutSet.weight` are **not** unit-tagged fields — they're
-implicitly in whatever `WEIGHT_UNIT` currently is, displayed via the
-constant everywhere (Weeks, Workouts pages). If a per-user unit preference is
-ever added, every read site that assumes `WEIGHT_UNIT` for those fields would
-need updating, not just `WeightService`.
+There **is** a per-user display unit: `UserSettings.unit` (`'kg' | 'lbs'`, default
+`'lbs'`), exposed as `SettingsService.unit()` and toggled on the Settings page.
+
+The rule that matters:
+
+> **Lifted weight is always *stored* in pounds.** `Workout.usualWeight`,
+> `Workout.maxWeight` and `WorkoutSet.weight` are plain numbers with no unit tag,
+> and every version of the app has written and displayed them as pounds — so pounds
+> is their canonical unit by definition. The unit preference is a **display-and-input
+> concern only**: convert at the boundary, never rewrite stored rows. There was no
+> data migration, and none is needed.
+
+`LIFTED_STORAGE_UNIT` (`weight.service.ts`) names that canonical unit. Convert with
+`displayLifted(lbs, unit)` on the way out and `liftedToCanonical(value, unit)` on the
+way in, or use the `lifted` pipe in templates. `WEIGHT_UNIT` still exists but is
+`@deprecated` — read `SettingsService.unit()` instead.
+
+`WeightEntry` (body weight) is the exception that needs none of this: it stores **both**
+`kg` and `lbs` on every document, so either can be read directly. `WeightGoal` stores
+both for the same reason.
+
+### Round-trip drift — the trap to know about
+
+`convertWeight` rounds to 1 decimal, so lbs → kg → lbs is **lossy**: 135 lbs → 61.2 kg
+→ 134.9 lbs. That means naively re-converting a form field on save would silently shift
+stored weights just because someone opened the form in kg and edited an unrelated field.
+
+Both weight-editing forms guard against this by remembering what they seeded a field
+with and writing the original canonical value back when the displayed value is
+unchanged — see `SetRow.canonicalWeight`/`seededWeight` in `weeks.ts` and the `seeded`
+/`canonical` pair in `workout-form-modal.ts`. If you add another weight input, do the
+same.

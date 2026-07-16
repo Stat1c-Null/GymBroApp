@@ -1,0 +1,57 @@
+<app-analytics-card
+  title="Weight burndown"
+  [subtitle]="goal() ? 'Your weigh-ins against the pace you need.' : 'Your weigh-ins and 7-day trend.'"
+  [state]="state()"
+  emptyMessage="No weigh-ins yet — log your first one to see your trend."
+>
+  <button actions class="btn btn-secondary" (click)="editGoal.emit()">
+    {{ goal() ? 'Edit goal' : 'Set a goal' }}
+  </button>
+
+  <a empty-action class="btn btn-primary" routerLink="/weights">Log a weigh-in</a>
+
+  @if (stats(); as s) {
+    @if (s.goalReached) {
+      <div class="auth-success banner">
+        <span>Goal reached — you're at {{ currentText() }} {{ unit() }}. Nice work.</span>
+      </div>
+    } @else if (s.targetDatePassed) {
+      <div class="auth-error banner">
+        <span>Your target date has passed. Update your goal to keep tracking a pace.</span>
+      </div>
+    }
+  }
+
+  <app-line-chart
+    [series]="series()"
+    [yDomain]="yDomain()"
+    [xDomain]="xDomain()"
+    [formatX]="formatX"
+    [formatY]="formatY"
+    [ariaLabel]="ariaLabel()"
+    [height]="320"
+  />
+
+  <div class="stats">
+    <app-stat-tile label="Current" [value]="currentText()" [unit]="unit()" [hint]="changeHint()" />
+
+    @if (stats(); as s) {
+      <app-stat-tile label="Goal" [value]="show(s.target)" [unit]="unit()"
+        [hint]="s.direction === 'cut' ? 'cutting' : 'bulking'" />
+      <app-stat-tile label="Remaining" [value]="remainingText()"
+        [unit]="s.goalReached ? '' : unit()" />
+      <app-stat-tile label="Rate" [value]="rateText()" [unit]="unit()" [tone]="rateTone()"
+        [hint]="rateHint()" />
+      <app-stat-tile label="Projected" [value]="projectedText()"
+        [hint]="s.projectedDate ? 'at this rate' : ''" />
+      <app-stat-tile label="Vs. plan" [value]="planText()"
+        [unit]="stats()?.deltaVsPlan == null ? '' : unit()" [tone]="planTone()"
+        [hint]="planHint()" />
+    } @else {
+      <div class="stats-cta">
+        <p class="text-muted">Set a goal to see your pace, projected finish date, and whether
+          you're ahead of plan.</p>
+      </div>
+    }
+  </div>
+</app-analytics-card>

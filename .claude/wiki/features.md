@@ -122,9 +122,62 @@ Two independent things live on this page:
 
 ## Analytics
 
-**Files**: `pages/analytics/`.
+**Files**: `pages/analytics/` (`analytics.ts`/`.html`/`.css`, `goal-form-modal.ts`,
+`weight-burndown/`), `analytics/` (pure maths), `components/charts/` (reusable
+chart toolkit), `services/weight-analytics.service.ts`.
 
-Stub page — renders a title and "Coming soon." No logic, no data source yet.
+One range selector (30d/90d/6m/1y/All) scoping a stack of cards. The range lives on
+the page, never per-card — two cards showing different windows is how a dashboard
+starts lying.
+
+### Weight burndown
+
+Plots **body weight over time** against the pace needed to reach a goal. Four marks:
+
+| Mark | Why |
+|---|---|
+| Weigh-ins (dots, no line) | The raw data. Deliberately unconnected — day-to-day bodyweight swings on water alone, and joining the dots produces a jagged line that shouts louder than the trend. |
+| 7-day trend (solid accent) | The actual signal. Fitted for rate/projection, not the raw dots. |
+| Plan (dashed gray) | Straight line from (start, startLbs) to (target, targetLbs) — the burndown reference. |
+| Projection (dashed accent) | Where the current trend crosses the target. Omitted when the trend is flat or heading away. |
+
+Note it plots *weight*, not "remaining to goal". A literal burndown would invert for
+bulking, vanish with no goal set, and rewrite its own history whenever the goal changed.
+
+**Direction-agnostic.** `goalDirection` is `cut` when the target is below the start,
+`bulk` when above, and every readout is normalised by `directionSign` (−1 / +1) so one
+implementation serves both — losing 2 lbs is progress on a cut and a setback on a bulk.
+Nothing in `analytics/burndown.ts` may assume "down is good". The specs mirror every
+cut fixture into its bulk twin and assert identical readouts; that's what caught a sign
+inversion in `deltaVsPlan` during development.
+
+**The goal** lives on `users/{uid}/settings/preferences` (see
+[Database](./database.md)) and is edited from a modal on this page, not Settings —
+it's analytics-specific and the empty-state CTA opens the same modal. With no goal the
+chart still renders weigh-ins + trend; only the pace, projection and vs-plan tiles are
+withheld. It must be useful before a goal exists.
+
+**Edge cases** are defined rather than incidental: zero weigh-ins → card empty state;
+one weigh-in (or all on one day) → no rate/projection, because `linearRegression`
+returns `null` on zero x-variance rather than a NaN that would silently poison every
+stat; goal reached → progress pinned to 1 and projection dropped; target date past →
+banner, and no pace to compare against.
+
+### Adding another analytic
+
+Write a reducer in `analytics/` and a card that composes `AnalyticsCardComponent` +
+`LineChartComponent` + `StatTileComponent`. The chart layer should need no change —
+that's the test of the design.
+
+> **Blocker for any *workout* analytic**: there is no way to read workout history
+> across weeks today. `WeekService` subscribes to one `weekId` at a time; parent
+> `weeks/{weekId}` docs are never created (only `addDoc` into the `entries`
+> subcollection), so they're Firestore *phantom* docs that `getDocs` won't return —
+> you can't even enumerate which weeks exist; and `WeekEntry` has no `uid` field, so
+> `collectionGroup('entries')` can't be user-scoped. Cheapest fix: derive week ids
+> client-side by walking Mondays back N weeks with `mondayOf`/`toWeekId` and querying
+> each. This does **not** block the body-weight burndown — `weights` is a flat,
+> directly queryable collection.
 
 ## Changelog
 

@@ -8,10 +8,12 @@ via `inject()`, never provided per-component.
 | Service | Backs | Key state (signals) | Key methods |
 |---|---|---|---|
 | `AuthService` | Firebase Auth | `currentUser`, `displayName` (computed) | `signUp`, `signIn`, `signInWithGoogle`, `resetPassword`, `logout`, `requireUid(action?)` |
-| `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups` (both computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `renameGroup`, `deleteGroup` |
+| `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups`, `unit`, `weightGoal` (all computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `setUnit`, `setWeightGoal`, `clearWeightGoal`, `renameGroup`, `deleteGroup` |
 | `WorkoutService` | `users/{uid}/workouts` | `workouts` (`undefined` while loading) | `add`, `update`, `remove`, `stageGroupReassign(batch, from, to)` |
 | `WeekService` | `users/{uid}/weeks/{weekId}/entries` | `entries`, `currentWeekStart`, `weekId`, `rangeLabel`, `isCurrentWeek`, `today` | `add`, `update`, `remove`, `previousWeek`, `nextWeek`, `goToThisWeek` |
 | `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove` |
+| `WeightAnalyticsService` | derives from `WeightService` + `SettingsService` | `samples`, `daily`, `trend`, `latestLbs`, `goal`, `today` | — (read-only derivation) |
+| `ChartThemeService` | `ThemeService` | `palette` (computed) | — |
 | `ThemeService` | `localStorage` only | `theme` (`'light' \| 'dark'`) | `toggleTheme` |
 | `ToastService` | in-memory only | `message`, `type`, `visible` | `show(message, type?, duration?)` |
 
@@ -41,6 +43,24 @@ Reusable, non-page pieces. All standalone.
 | `ToastComponent` | `app-toast` | — | — | Mounted once at app root; reads `ToastService` directly. |
 | `WorkoutFormModalComponent` | `app-workout-form-modal` | `open`, `editingWorkout`, `presetGroup` | `close`, `saved` | Owns the entire create/edit-workout form + validation + save call. Shared by the Workouts page and the Weeks page's inline "create new workout" flow — see [Features → Workouts](./features.md#workouts-exercise-library). Re-seeds its fields from `editingWorkout`/`presetGroup` only on the closed→open transition (tracked via a local `prevOpen` flag in an `effect()`), so it doesn't clobber in-progress typing while already open. |
 | `ChangelogEntryComponent` | `app-changelog-entry` | `version`, `date`, `changes` (all `input.required`) | — | Bordered card for one changelog release. See [Features → Changelog](./features.md#changelog). |
+| `LiftedWeightPipe` | `lifted` (pipe) | — | — | `{{ set.weight \| lifted: unit() }}` → `"135 lbs"` / `"61.2 kg"`. Takes the unit as an argument rather than injecting it, so the pipe stays pure. See [Database → Weight unit handling](./database.md#weight-unit-handling). |
+
+### Charts (`src/app/components/charts/`)
+
+The reusable analytics toolkit. Adding a new analytic should mean writing a data
+reducer and a card — not touching anything in here.
+
+| Component | Selector | Inputs | Notes |
+|---|---|---|---|
+| `LineChartComponent` | `app-line-chart` | `series` (required), `height`, `yDomain`, `xDomain`, `formatX`, `formatY`, `ariaLabel` (required) | **The only place Chart.js is touched.** Speaks `ChartSeries`/signals; quarantines ng2-charts, which is decorator-based and not signal-native. Declares `provideCharts(withDefaultRegisterables())` in its own `providers` — doing it in `app.config.ts` put ~208kB of Chart.js in the *initial* bundle. Renders an `.sr-only` table twin because a `<canvas>` is opaque to assistive tech. Uses a `linear` x scale over epoch-ms, not Chart.js's `time` scale, which would need a date-adapter dependency. |
+| `AnalyticsCardComponent` | `app-analytics-card` | `title` (required), `subtitle`, `state`, `emptyMessage` | Titled `.glass-card` with loading/empty/ready states; encodes the `undefined = loading, [] = empty` convention once. Has **no** filter slot on purpose — per-card ranges let cards disagree. |
+| `StatTileComponent` | `app-stat-tile` | `label` (required), `value` (required), `unit`, `tone`, `hint` | One headline number. A toned tile always renders an arrow + words, never colour alone. |
+| `RangeSelectorComponent` | `app-range-selector` | `range` (`model()`) | 30d/90d/6m/1y/All. Belongs in one row above the cards. |
+
+`ChartThemeService` + `CHART_PALETTE` (`chart-palette.ts`) supply chart colours from
+TypeScript rather than CSS variables — canvas cannot read CSS custom properties, and
+reading `getComputedStyle` on theme change races `ThemeService`'s own effect. See
+[Design system → Charts](./design-system.md).
 
 ## Layout (`src/app/layout/`)
 
@@ -63,7 +83,7 @@ this list is just the file map:
 | Weeks | `/weeks` | `weeks.ts`, `.html`, `.css` |
 | Workouts | `/workouts` | `workouts.ts`, `.html`, `.css` |
 | Weights | `/weights` | `weights.ts`, `.html`, `.css` |
-| Analytics | `/analytics` | `analytics.ts` (inline template, stub) |
+| Analytics | `/analytics` | `analytics.ts`, `.html`, `.css`; `goal-form-modal.ts`; `weight-burndown/weight-burndown.ts`, `.html`, `.css` |
 | Settings | `/settings` | `settings.ts`, `.html`, `.css` |
 | Changelog | `/changelog` | `changelog.ts`, `.html`, `.css`, `changelog-data.ts` |
 

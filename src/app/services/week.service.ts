@@ -86,6 +86,26 @@ export function toWeekId(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Inverse of {@link toWeekId}: a local `YYYY-MM-DD` day id back to a Date at local
+ * midnight. Built from parts rather than `new Date(id)`, which parses a bare
+ * `YYYY-MM-DD` as UTC and can land on the previous day west of Greenwich.
+ *
+ * Despite the `toWeekId` name, the pair is a general local-day-id codec — the
+ * weight goal stores its start/target dates with it too.
+ */
+export function parseDateId(id: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(id);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  date.setHours(0, 0, 0, 0);
+  // Rejects impossible days (e.g. 2026-02-31, which would roll into March).
+  return date.getMonth() === Number(m) - 1 && date.getDate() === Number(d)
+    ? date
+    : null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class WeekService {
   private readonly firestore = inject(Firestore);

@@ -4,11 +4,16 @@ import { Firestore, doc, docData, setDoc, writeBatch } from '@angular/fire/fires
 import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 import { MUSCLE_GROUPS, UNASSIGNED_GROUP, WorkoutService } from './workout.service';
+import { LIFTED_STORAGE_UNIT, WeightGoal, WeightUnit } from './weight.service';
 
 /** Per-user app preferences. Extend here as more settings are added. */
 export interface UserSettings {
   showSetTime: boolean;
   muscleGroups?: string[];
+  /** Unit to display weights in. Absent means the historical default, pounds. */
+  unit?: WeightUnit;
+  /** The body-weight target driving the burndown chart. `null` means "no goal". */
+  weightGoal?: WeightGoal | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -37,6 +42,39 @@ export class SettingsService {
   readonly muscleGroups = computed(
     () => this.settings()?.muscleGroups ?? MUSCLE_GROUPS
   );
+
+  /**
+   * The unit to display weights in. Defaults to {@link LIFTED_STORAGE_UNIT} so
+   * existing users see exactly what they saw before the preference existed.
+   */
+  readonly unit = computed<WeightUnit>(
+    () => this.settings()?.unit ?? LIFTED_STORAGE_UNIT
+  );
+
+  /** The user's body-weight goal, or `null` if they haven't set one. */
+  readonly weightGoal = computed<WeightGoal | null>(
+    () => this.settings()?.weightGoal ?? null
+  );
+
+  async setUnit(unit: WeightUnit): Promise<void> {
+    const uid = this.auth.requireUid('change settings');
+    await setDoc(this.settingsDoc(uid), { unit }, { merge: true });
+  }
+
+  async setWeightGoal(goal: WeightGoal): Promise<void> {
+    const uid = this.auth.requireUid('set a weight goal');
+    // Written whole rather than merged field-by-field: a goal is one coherent
+    // record, and a partial merge could leave a start from one goal paired with
+    // a target from another.
+    await setDoc(this.settingsDoc(uid), { weightGoal: goal }, { merge: true });
+  }
+
+  async clearWeightGoal(): Promise<void> {
+    const uid = this.auth.requireUid('clear your weight goal');
+    // `merge: true` can't remove a field, so the absence of a goal is stored
+    // explicitly as null. Readers treat null and missing identically.
+    await setDoc(this.settingsDoc(uid), { weightGoal: null }, { merge: true });
+  }
 
   async setShowSetTime(value: boolean): Promise<void> {
     const uid = this.auth.requireUid('change settings');

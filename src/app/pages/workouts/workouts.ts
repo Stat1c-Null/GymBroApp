@@ -1,14 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
-import { WEIGHT_UNIT } from '../../services/weight.service';
+import { LiftedWeightPipe } from '../../components/lifted-weight-pipe';
 import { SettingsService } from '../../services/settings.service';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 
 @Component({
   selector: 'app-workouts',
   standalone: true,
-  imports: [WorkoutFormModalComponent],
+  imports: [WorkoutFormModalComponent, LiftedWeightPipe],
   templateUrl: './workouts.html',
   styleUrl: './workouts.css',
 })
@@ -49,7 +49,7 @@ export class WorkoutsComponent {
     });
   }
 
-  protected readonly unit = WEIGHT_UNIT;
+  protected readonly unit = this.settings.unit;
 
   // Shared create/edit-workout modal state.
   protected readonly modalOpen = signal(false);

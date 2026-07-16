@@ -774,3 +774,61 @@ a:hover {
   left: calc(100% - 20px);
   background: white;
 }
+
+/* ---- Segmented control (shared: Settings unit toggle, Analytics range) ----
+   A small set of mutually exclusive options. Prefer this over a <select> when
+   there are ≤ 5 options and the choice is worth showing at a glance. */
+.segmented {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.segmented button {
+  padding: 6px 12px;
+  font-family: var(--font-family);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 5px);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.segmented button:hover:not(:disabled):not(.active) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.segmented button.active {
+  color: var(--text-on-primary);
+  background: var(--primary-gradient);
+}
+
+.segmented button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---- Screen-reader-only ----
+   Keeps content in the accessibility tree while hiding it visually. The chart's
+   table-view twin uses this: a <canvas> is opaque to assistive tech, so the
+   table is the only WCAG-clean way to read the values. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

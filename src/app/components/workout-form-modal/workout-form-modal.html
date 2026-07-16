@@ -28,12 +28,12 @@
 
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label" for="workout-usual">Usual weight ({{ unit }})</label>
+        <label class="form-label" for="workout-usual">Usual weight ({{ unit() }})</label>
         <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
           [(ngModel)]="usualWeight" name="usualWeight" />
       </div>
       <div class="form-group">
-        <label class="form-label" for="workout-max">Max weight ({{ unit }})</label>
+        <label class="form-label" for="workout-max">Max weight ({{ unit() }})</label>
         <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
           [(ngModel)]="maxWeight" name="maxWeight" />
       </div>

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
 import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
-import { WEIGHT_UNIT } from '../../services/weight.service';
+import { displayLifted, liftedToCanonical } from '../../services/weight.service';
 import { ModalComponent } from '../../components/modal/modal';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 import {
@@ -20,7 +20,18 @@ import {
  *  it's parsed to seconds (the stored `WorkoutSet.time`) on submit. */
 interface SetRow {
   reps: number | null;
+  /** Weight as shown in the user's unit; converted back to canonical lbs on submit. */
   weight: number | null;
+  /**
+   * What this row was seeded with: the stored (canonical lbs) value, and the
+   * display value derived from it. While `weight` still equals `seededWeight` the
+   * user hasn't touched the field, so `canonicalWeight` is written back verbatim.
+   * Converting again would round-trip through `convertWeight`'s 1-decimal rounding
+   * and silently shift the stored number (135 lbs → 61.2 kg → 134.9 lbs) just
+   * because someone opened the form in kg and edited the reps.
+   */
+  canonicalWeight: number | null;
+  seededWeight: number | null;
   timeText: string;
 }
 
@@ -54,7 +65,7 @@ export class WeeksComponent {
    *  editing. When on, each set row shows an m:ss time field. */
   protected readonly modalTrackTime = signal(false);
 
-  protected readonly unit = WEIGHT_UNIT;
+  protected readonly unit = this.settings.unit;
 
   // --- Week state (delegated to the service) ---
   protected readonly entries = this.service.entries;
@@ -135,11 +146,9 @@ export class WeeksComponent {
     this.modalTrackTime.set(
       entry.trackTime ?? entry.sets.some((s) => s.time != null)
     );
-    this.rowPool = entry.sets.map((s) => ({
-      reps: s.reps,
-      weight: s.weight,
-      timeText: formatTime(s.time ?? null),
-    }));
+    this.rowPool = entry.sets.map((s) =>
+      this.seedRow(s.weight, s.reps, formatTime(s.time ?? null))
+    );
     this.setRows.set(this.rowPool.slice());
     this.error.set('');
     this.showModal.set(true);
@@ -168,9 +177,7 @@ export class WeeksComponent {
     this.showCreateWorkout.set(false);
     this.modalMuscleGroup.set(workout.muscleGroup);
     this.modalWorkoutId.set(workout.id ?? '');
-    const weight = workout.usualWeight ?? null;
-    this.rowPool = this.rowPool.map((r) => ({ ...r, weight }));
-    this.setRows.set(this.rowPool.slice(0, this.setRows().length));
+    this.reseedWeights(workout.usualWeight ?? null);
   }
 
   protected onMuscleGroupChange(group: string): void {
@@ -183,18 +190,16 @@ export class WeeksComponent {
   protected onWorkoutChange(id: string): void {
     this.modalWorkoutId.set(id);
     // Re-default each set's weight to the newly chosen workout's usual weight.
-    const weight = this.selectedWorkout()?.usualWeight ?? null;
-    this.rowPool = this.rowPool.map((r) => ({ ...r, weight }));
-    this.setRows.set(this.rowPool.slice(0, this.setRows().length));
+    this.reseedWeights(this.selectedWorkout()?.usualWeight ?? null);
   }
 
   /** Grow/shrink the visible per-set rows. Shrinking only hides rows (they
    *  stay in the pool with their data); growing brings them back. */
   protected onSetsCountChange(value: number | null): void {
     const count = Math.max(0, Math.min(Math.floor(value ?? 0), 20));
-    const weight = this.selectedWorkout()?.usualWeight ?? null;
+    const canonicalWeight = this.selectedWorkout()?.usualWeight ?? null;
     while (this.rowPool.length < count) {
-      this.rowPool.push({ reps: null, weight, timeText: '' });
+      this.rowPool.push(this.seedRow(canonicalWeight));
     }
     this.setRows.set(this.rowPool.slice(0, count));
   }
@@ -237,7 +242,7 @@ export class WeeksComponent {
       trackTime,
       sets: sets.map((s) => ({
         reps: s.reps,
-        weight: s.weight ?? null,
+        weight: this.toCanonicalWeight(s),
         time: trackTime ? parseTime(s.timeText) : null,
       })),
     };
@@ -274,10 +279,41 @@ export class WeeksComponent {
    *  Times are shown whenever a set has one stored — independent of the toggle. */
   protected setSummary(entry: WeekEntry): string {
     const parts = entry.sets.map((s) => {
-      const base = s.weight != null ? `${s.reps}×${s.weight}` : `${s.reps}`;
+      const weight = displayLifted(s.weight, this.settings.unit());
+      const base = weight != null ? `${s.reps}×${weight}` : `${s.reps}`;
       return s.time != null ? `${base} (${formatTime(s.time)})` : base;
     });
     const hasWeight = entry.sets.some((s) => s.weight != null);
-    return parts.join(' · ') + (hasWeight ? ` ${this.unit}` : '');
+    return parts.join(' · ') + (hasWeight ? ` ${this.settings.unit()}` : '');
+  }
+
+  /** A set row seeded from a stored (canonical lbs) weight. See {@link SetRow}. */
+  private seedRow(
+    canonicalWeight: number | null,
+    reps: number | null = null,
+    timeText = ''
+  ): SetRow {
+    const weight = displayLifted(canonicalWeight, this.settings.unit());
+    return { reps, weight, canonicalWeight, seededWeight: weight, timeText };
+  }
+
+  /** Re-seed every pooled row's weight (e.g. the selected workout changed),
+   *  leaving reps and time intact. */
+  private reseedWeights(canonicalWeight: number | null): void {
+    const weight = displayLifted(canonicalWeight, this.settings.unit());
+    this.rowPool = this.rowPool.map((r) => ({
+      ...r,
+      weight,
+      canonicalWeight,
+      seededWeight: weight,
+    }));
+    this.setRows.set(this.rowPool.slice(0, this.setRows().length));
+  }
+
+  /** The value to store for a row — see {@link SetRow.canonicalWeight}. */
+  private toCanonicalWeight(row: SetRow): number | null {
+    if (row.weight == null) return null;
+    if (row.weight === row.seededWeight) return row.canonicalWeight;
+    return liftedToCanonical(row.weight, this.settings.unit());
   }
 }

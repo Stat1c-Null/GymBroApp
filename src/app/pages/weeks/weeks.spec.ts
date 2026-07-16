@@ -126,7 +126,14 @@ describe('WeeksComponent', () => {
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT] } },
         { provide: ToastService, useValue: toast },
-        { provide: SettingsService, useValue: { showSetTime: () => false, muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'] } },
+        {
+          provide: SettingsService,
+          useValue: {
+            showSetTime: () => false,
+            unit: () => 'lbs',
+            muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
+          },
+        },
       ],
     }).compileComponents();
 

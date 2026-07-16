@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, input, output, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
-import { WEIGHT_UNIT } from '../../services/weight.service';
+import { displayLifted, liftedToCanonical } from '../../services/weight.service';
 import { SettingsService } from '../../services/settings.service';
 import { ModalComponent } from '../modal/modal';
 
@@ -33,7 +33,7 @@ export class WorkoutFormModalComponent {
   readonly close = output<void>();
   readonly saved = output<Workout>();
 
-  protected readonly unit = WEIGHT_UNIT;
+  protected readonly unit = this.settings.unit;
   protected readonly muscleGroupsForForm = computed(() => [
     ...this.settings.muscleGroups(),
     UNASSIGNED_GROUP,
@@ -45,8 +45,19 @@ export class WorkoutFormModalComponent {
 
   protected name = '';
   protected muscleGroup = '';
+  /** Shown in the user's unit; converted back to canonical lbs on submit. */
   protected usualWeight: number | null = null;
   protected maxWeight: number | null = null;
+
+  /**
+   * What the weight fields were seeded with: the stored (canonical lbs) values and
+   * the display values derived from them. An untouched field is written back
+   * verbatim — re-converting it would round-trip through `convertWeight`'s
+   * 1-decimal rounding and shift the stored number (135 lbs → 61.2 kg → 134.9 lbs)
+   * just because someone opened the form in kg and renamed the workout.
+   */
+  private seeded = { usual: null as number | null, max: null as number | null };
+  private canonical = { usual: null as number | null, max: null as number | null };
 
   constructor() {
     // Re-seed the form each time the modal transitions from closed to open, so
@@ -65,8 +76,11 @@ export class WorkoutFormModalComponent {
     this.name = w?.name ?? '';
     this.muscleGroup =
       w?.muscleGroup ?? this.presetGroup() ?? this.muscleGroupsForForm()[0] ?? '';
-    this.usualWeight = w?.usualWeight ?? null;
-    this.maxWeight = w?.maxWeight ?? null;
+    const unit = this.settings.unit();
+    this.canonical = { usual: w?.usualWeight ?? null, max: w?.maxWeight ?? null };
+    this.usualWeight = displayLifted(this.canonical.usual, unit);
+    this.maxWeight = displayLifted(this.canonical.max, unit);
+    this.seeded = { usual: this.usualWeight, max: this.maxWeight };
     this.error.set('');
   }
 
@@ -82,8 +96,8 @@ export class WorkoutFormModalComponent {
     const data = {
       name: this.name.trim(),
       muscleGroup: this.muscleGroup,
-      usualWeight: this.usualWeight ?? null,
-      maxWeight: this.maxWeight ?? null,
+      usualWeight: this.toCanonical(this.usualWeight, this.seeded.usual, this.canonical.usual),
+      maxWeight: this.toCanonical(this.maxWeight, this.seeded.max, this.canonical.max),
     };
     const id = this.editingWorkout()?.id ?? null;
 
@@ -104,5 +118,16 @@ export class WorkoutFormModalComponent {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /** The value to store for a weight field — see {@link seeded}. */
+  private toCanonical(
+    current: number | null,
+    seeded: number | null,
+    canonical: number | null
+  ): number | null {
+    if (current == null) return null;
+    if (current === seeded) return canonical;
+    return liftedToCanonical(current, this.settings.unit());
   }
 }

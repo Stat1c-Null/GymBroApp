@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WeightUnit } from '../../services/weight.service';
 
 @Component({
   selector: 'app-settings',
@@ -17,7 +18,21 @@ export class SettingsComponent {
   private readonly workoutService = inject(WorkoutService);
 
   protected readonly showSetTime = this.settings.showSetTime;
+  protected readonly unit = this.settings.unit;
+  protected readonly units: readonly WeightUnit[] = ['lbs', 'kg'];
   protected readonly saving = signal(false);
+
+  protected async setUnit(unit: WeightUnit): Promise<void> {
+    if (unit === this.unit()) return;
+    this.saving.set(true);
+    try {
+      await this.settings.setUnit(unit);
+    } catch {
+      this.toast.show('Could not save your setting. Please try again.', 'error');
+    } finally {
+      this.saving.set(false);
+    }
+  }
 
   protected async toggleSetTime(): Promise<void> {
     this.saving.set(true);

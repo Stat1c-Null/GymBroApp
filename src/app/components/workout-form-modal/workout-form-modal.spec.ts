@@ -42,7 +42,10 @@ describe('WorkoutFormModalComponent', () => {
       providers: [
         { provide: WorkoutService, useValue: service },
         { provide: ToastService, useValue: toast },
-        { provide: SettingsService, useValue: { muscleGroups: () => [...MUSCLE_GROUPS] } },
+        {
+          provide: SettingsService,
+          useValue: { muscleGroups: () => [...MUSCLE_GROUPS], unit: () => 'lbs' },
+        },
       ],
     }).compileComponents();
 

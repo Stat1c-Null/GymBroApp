@@ -14,6 +14,10 @@
   `@angular/core/rxjs-interop`) are the bridge every data service uses to turn
   a Firestore stream into a signal — see [The service/signal
   pattern](#the-servicesignal-pattern-central) below.
+- **Chart.js 4 + ng2-charts 10** power the Analytics charts — the app's only
+  UI dependency. Confined to `LineChartComponent`; see [Charts](#charts-and-analytics)
+  below. (ng2-charts declares an `@angular/cdk` peer, but its published bundle never
+  imports CDK — **do not install it**.)
 - **Vitest** for unit tests (not Karma/Jasmine). No e2e framework is
   configured.
 - Global styling is one file, `src/styles.css` — see
@@ -85,6 +89,37 @@ Two different shells depending on whether the user is authenticated:
   page's form via `<ng-content />`. Also renders `SettingsSidebarComponent`,
   a floating panel with just the theme toggle — the only way to change theme
   before signing in.
+
+## Charts and analytics
+
+The Analytics feature adds two directories that are neither pages nor services, laid
+out so each layer is independently testable:
+
+```
+src/app/analytics/          pure maths — NO Angular, NO Firestore imports
+  chart.types.ts            ChartPoint, ChartSeries, TimeRange
+  time-series.ts            bucketing, moving average, regression, scales
+  burndown.ts               direction-agnostic burndown maths
+src/app/components/charts/  reusable presentation — no service imports
+  chart-palette.ts          theme → colours (TS, not CSS — see design-system.md)
+  line-chart.ts             the only place Chart.js is touched
+  analytics-card.ts, stat-tile.ts, range-selector.ts
+```
+
+**The layering rule:** `analytics/` never imports Angular (only `import type` may
+reach into `services/`, which erases at compile time). `components/charts/` never
+imports `services/`. Feature composition happens only in `pages/analytics/`.
+
+That's what makes the maths unit-testable as plain functions with no TestBed, and
+what should make the next analytic (volume per muscle group) a *page-level* change
+rather than a chart change.
+
+**Bundle placement matters here.** `provideCharts(withDefaultRegisterables())` is
+declared in `LineChartComponent`'s own `providers`, **not** `app.config.ts`. It pulls
+in all of Chart.js at module scope, so providing it from the eager app config put
+~208kB in the *initial* bundle for every user — including everyone who never opens
+Analytics. Declared on the component, Chart.js stays in the lazy `analytics` chunk
+(initial 650kB vs 858kB). Don't move it back.
 
 ## The service/signal pattern (central)
 

@@ -39,9 +39,9 @@
                     </div>
                     <div class="list-meta">
                       <div class="list-stats">
-                        <span>usual <strong>{{ w.usualWeight ?? '—' }}{{ w.usualWeight != null ? unit : '' }}</strong></span>
+                        <span>usual <strong>{{ w.usualWeight | lifted: unit() }}</strong></span>
                         <span class="dot">·</span>
-                        <span>max <strong>{{ w.maxWeight ?? '—' }}{{ w.maxWeight != null ? unit : '' }}</strong></span>
+                        <span>max <strong>{{ w.maxWeight | lifted: unit() }}</strong></span>
                       </div>
                       <div class="list-actions">
                         <button class="list-action" (click)="openModal(w)" aria-label="Edit workout">
