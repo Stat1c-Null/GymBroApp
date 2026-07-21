@@ -143,8 +143,7 @@ export class WeightBurndownComponent {
   protected readonly formatX = (ms: number): string =>
     new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
-  protected readonly formatY = (lbs: number): string =>
-    `${displayLifted(lbs, this.unit()) ?? 0}`;
+  protected readonly formatY = (lbs: number): string => this.show(lbs);
 
   protected readonly ariaLabel = computed(() => {
     const stats = this.stats();
@@ -226,8 +225,16 @@ export class WeightBurndownComponent {
     return stats.deltaVsPlan >= 0 ? 'ahead of plan' : 'behind plan';
   });
 
-  /** A pounds value rendered in the user's unit, without the unit suffix. */
+  /**
+   * A pounds value rendered in the user's unit, rounded to 1 decimal, without the
+   * unit suffix. The single rounding path for both the stat tiles and the chart's
+   * axis/tooltip: the burndown feeds *computed* values — a regression slope × a
+   * week, a delta-vs-plan, a remaining distance — which, unlike a stored weigh-in,
+   * carry full float precision. Round at the display boundary so no readout ever
+   * shows `182.4444444` and overflows its tile.
+   */
   protected show(lbs: number): string {
-    return `${displayLifted(lbs, this.unit()) ?? 0}`;
+    const value = displayLifted(lbs, this.unit()) ?? 0;
+    return `${Math.round(value * 10) / 10}`;
   }
 }

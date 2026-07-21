@@ -36,14 +36,26 @@ export type StatTone = 'neutral' | 'good' | 'bad';
   `,
   styles: [
     `
+      /* Fill the grid track the host sits in: the grid stretches the host to the
+         row's height, so the tile must fill the host — otherwise a tile with no
+         hint (e.g. "Remaining") stops at its content and reads shorter than its
+         rowmates. */
+      :host {
+        display: flex;
+      }
+
       .tile {
         display: flex;
         flex-direction: column;
         gap: 0.15rem;
+        flex: 1;
         padding: 0.85rem 1rem;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius-md);
+        /* Let the tile shrink inside its grid track so a long value (e.g. the
+           projected date) wraps within the box rather than spilling past it. */
+        min-width: 0;
       }
 
       .tile-label {
@@ -57,11 +69,14 @@ export type StatTone = 'neutral' | 'good' | 'bad';
       .tile-value {
         display: flex;
         align-items: baseline;
+        flex-wrap: wrap;
         gap: 0.3rem;
+        min-width: 0;
         font-size: 1.35rem;
         font-weight: 700;
         line-height: 1.25;
         color: var(--text-primary);
+        overflow-wrap: anywhere;
       }
 
       .tile-value.good {

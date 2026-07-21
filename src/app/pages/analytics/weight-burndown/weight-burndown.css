@@ -2,11 +2,22 @@
   margin-bottom: 1rem;
 }
 
+/* Fixed column counts, not auto-fit: with six tiles, auto-fit's last row holds a
+   single tile that stretches to the card's full width — the "uneven boxes". Two
+   columns on phones, three from 560px up, both divide six cleanly (2×3 / 3×2), so
+   every tile is the same width in every layout. minmax(0, 1fr) lets a tile shrink
+   below its content width instead of overflowing. */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
   margin-top: 1.25rem;
+}
+
+@media (min-width: 560px) {
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .stats-cta {
