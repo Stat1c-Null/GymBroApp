@@ -1,0 +1,89 @@
+========================================================================
+FIREBASE SETUP — Exercise Analytics (per muscle group)
+Project: gymbroapp-7b680
+Do this before the "Exercise progress" card on /analytics will show data.
+========================================================================
+
+WHY: The exercise analytics reads every logged set across all weeks with one
+Firestore collection-group query, filtered by owner uid. Firestore needs (1) an
+index for that query and (2) a security rule that allows it. The app can't create
+these from code — they live in the Firebase console.
+
+There are 3 tasks. Do them in order.
+
+------------------------------------------------------------------------
+TASK 1 — Create the collection-group index (easiest way: let the app tell you)
+------------------------------------------------------------------------
+1. Run the app and sign in.
+2. Open the Analytics page (/analytics).
+3. Open the browser DevTools console (F12 -> Console tab).
+4. You'll see a Firestore error that contains a link like:
+       https://console.firebase.google.com/project/gymbroapp-7b680/firestore/indexes?create_composite=...
+5. Click that link. It opens the Firebase console with the exact index
+   pre-filled. Click "Create index".
+6. Wait for the index status to go from "Building" to "Enabled"
+   (usually a few minutes).
+
+   The index is: collection = "entries", scope = "Collection group",
+   field "uid" Ascending.
+
+If for some reason no link appears, create it manually:
+   Firebase console -> Firestore Database -> Indexes tab -> Single-field
+   (or Composite) -> add a Collection group index on collection id "entries",
+   field "uid", scope "Collection group".
+
+------------------------------------------------------------------------
+TASK 2 — Add the security rule
+------------------------------------------------------------------------
+1. Firebase console -> Firestore Database -> Rules tab.
+2. Make sure there is a rule that allows a signed-in user to read their own
+   entries via a collection-group query. Add this block inside
+   `service cloud.firestore { match /databases/{database}/documents { ... } }`:
+
+       match /{path=**}/entries/{entryId} {
+         allow read: if request.auth != null
+                     && resource.data.uid == request.auth.uid;
+       }
+
+   Notes:
+   - This only affects READS via the collection-group query. Your existing
+     per-week write/read rules under users/{uid}/weeks/... stay as they are.
+   - If you already have broader rules that permit reads under users/{uid}/...,
+     you may still need THIS one specifically, because collection-group queries
+     are matched by the {path=**}/entries pattern, not by the users/{uid} path.
+3. Click "Publish".
+
+------------------------------------------------------------------------
+TASK 3 — Verify + run the data back-fill
+------------------------------------------------------------------------
+Old workouts logged before this feature don't have the `uid`/`date` fields the
+query needs. The app back-fills them automatically the first time you open
+Analytics (safe + idempotent: it only ADDS those two fields, never changes your
+sets/weights/reps). You can also run it on demand.
+
+1. After Tasks 1 & 2 are done, reload /analytics.
+2. Check the browser console for a line like:
+       [analytics] entry back-fill complete: stamped N, skipped M
+       - "stamped" = old entries that just got uid/date added
+       - "skipped" = entries already up to date
+3. To run it again any time: Settings page -> "Refresh analytics data" -> Re-run.
+   A toast shows the counts. Running it repeatedly is harmless.
+4. Sanity check (optional): in Firestore, open a few docs under
+   users/<your-uid>/weeks/<weekId>/entries/ and confirm they now have `uid` and
+   `date` fields, and that everything else (sets, weights, reps, createdAt) is
+   unchanged. Your total number of logged entries should be identical to before.
+
+------------------------------------------------------------------------
+DONE = the "Exercise progress" card shows bars
+------------------------------------------------------------------------
+Once the index is Enabled, the rule is Published, and the back-fill has run,
+open /analytics -> "Exercise progress": pick a muscle group, select exercises,
+toggle the metric (Est. 1RM / Top set / Volume / Reps / Sets), and you should
+see the bar chart + stat tiles populate.
+
+If it's still empty:
+  - Index still "Building"? Wait for "Enabled".
+  - Console shows a permissions error? Re-check the Task 2 rule is published.
+  - Console shows another "create index" link? Click it (a second index may be
+    needed) and wait for it to build.
+========================================================================

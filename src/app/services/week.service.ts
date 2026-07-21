@@ -67,6 +67,13 @@ export interface WeekEntry {
   trackTime?: boolean; // per-entry time-per-set tracking (older entries lack it)
   sets: WorkoutSet[]; // length = number of sets
   createdAt?: unknown; // Firestore serverTimestamp → newest on top
+  /** Owner uid, denormalized so the cross-week analytics collection-group query
+   *  can scope to one user. Set by the service on every write; absent on entries
+   *  logged before the analytics feature (back-filled by EntryBackfillService). */
+  uid?: string;
+  /** Logical local day id ('YYYY-MM-DD') = this week's Monday + `day`. Set by the
+   *  service; gives analytics a stable date without unwrapping the serverTimestamp. */
+  date?: string;
 }
 
 /** The Monday (local, midnight) of the week containing `date`. */
@@ -104,6 +111,19 @@ export function parseDateId(id: string): Date | null {
   return date.getMonth() === Number(m) - 1 && date.getDate() === Number(d)
     ? date
     : null;
+}
+
+/**
+ * The logical local day id ('YYYY-MM-DD') of an entry: `day` days after the week's
+ * Monday. Lets analytics place a logged set on a timeline without unwrapping its
+ * pending serverTimestamp. `day` 0 = Monday, matching {@link WeekEntry.day}.
+ */
+export function entryDate(weekId: string, day: number): string {
+  const monday = parseDateId(weekId);
+  if (!monday) return weekId; // malformed weekId — fall back to the week start
+  const d = new Date(monday);
+  d.setDate(d.getDate() + day);
+  return toWeekId(d);
 }
 
 @Injectable({ providedIn: 'root' })
@@ -198,6 +218,8 @@ export class WeekService {
     const uid = this.requireUid();
     await addDoc(this.weekEntries(uid, this.weekId()), {
       ...data,
+      uid,
+      date: entryDate(this.weekId(), data.day),
       createdAt: serverTimestamp(),
     });
   }
@@ -207,7 +229,11 @@ export class WeekService {
     data: Omit<WeekEntry, 'id' | 'createdAt'>
   ): Promise<void> {
     const uid = this.requireUid();
-    await updateDoc(this.entryDoc(uid, this.weekId(), id), { ...data });
+    await updateDoc(this.entryDoc(uid, this.weekId(), id), {
+      ...data,
+      uid,
+      date: entryDate(this.weekId(), data.day),
+    });
   }
 
   async remove(id: string): Promise<void> {

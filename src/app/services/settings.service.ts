@@ -1,6 +1,6 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { Firestore, doc, docData, setDoc, writeBatch } from '@angular/fire/firestore';
+import { Firestore, doc, docData, serverTimestamp, setDoc, writeBatch } from '@angular/fire/firestore';
 import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 import { MUSCLE_GROUPS, UNASSIGNED_GROUP, WorkoutService } from './workout.service';
@@ -14,6 +14,8 @@ export interface UserSettings {
   unit?: WeightUnit;
   /** The body-weight target driving the burndown chart. `null` means "no goal". */
   weightGoal?: WeightGoal | null;
+  /** When the one-time analytics uid/date back-fill last completed. Absent = never run. */
+  entriesBackfilledAt?: unknown;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -56,6 +58,11 @@ export class SettingsService {
     () => this.settings()?.weightGoal ?? null
   );
 
+  /** When the analytics uid/date back-fill last completed, or `null` if never run. */
+  readonly entriesBackfilledAt = computed<unknown>(
+    () => this.settings()?.entriesBackfilledAt ?? null
+  );
+
   async setUnit(unit: WeightUnit): Promise<void> {
     const uid = this.auth.requireUid('change settings');
     await setDoc(this.settingsDoc(uid), { unit }, { merge: true });
@@ -90,6 +97,16 @@ export class SettingsService {
     await setDoc(
       this.settingsDoc(uid),
       { muscleGroups: groups },
+      { merge: true }
+    );
+  }
+
+  /** Record that the analytics back-fill has completed, so it isn't run again. */
+  async markEntriesBackfilled(): Promise<void> {
+    const uid = this.auth.requireUid('change settings');
+    await setDoc(
+      this.settingsDoc(uid),
+      { entriesBackfilledAt: serverTimestamp() },
       { merge: true }
     );
   }

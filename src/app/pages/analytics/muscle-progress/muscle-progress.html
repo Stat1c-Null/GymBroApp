@@ -1,0 +1,110 @@
+<app-analytics-card
+  title="Exercise progress"
+  subtitle="Compare how your lifts are trending, by muscle group."
+  [state]="state()"
+  emptyMessage="Add a few exercises and log some sets to see your progress here."
+>
+  <a empty-action class="btn btn-primary" routerLink="/workouts">Add an exercise</a>
+
+  <div class="controls">
+    <div class="control">
+      <span class="control-label">Muscle group</span>
+      <div class="chips" role="group" aria-label="Muscle group">
+        @for (g of groups(); track g) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="selectedGroup() === g"
+            [attr.aria-pressed]="selectedGroup() === g"
+            (click)="selectGroup(g)"
+          >
+            {{ g }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="control">
+      <span class="control-label">Metric</span>
+      <div class="segmented-scroll">
+        <div class="segmented" role="group" aria-label="Metric">
+          @for (m of metrics; track m.key) {
+            <button
+              type="button"
+              [class.active]="metric() === m.key"
+              [attr.aria-pressed]="metric() === m.key"
+              (click)="selectMetric(m.key)"
+            >
+              {{ m.label }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="control">
+    <span class="control-label">
+      Exercises
+      <span class="control-hint">compare up to {{ maxSelected }}</span>
+    </span>
+    @if (exercises().length) {
+      <div class="chips" role="group" aria-label="Exercises to compare">
+        @for (w of exercises(); track w.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="isSelected(w.id!)"
+            [disabled]="atCapacity(w.id!)"
+            [attr.aria-pressed]="isSelected(w.id!)"
+            (click)="toggleExercise(w.id!)"
+          >
+            {{ w.name }}
+          </button>
+        }
+      </div>
+    } @else {
+      <p class="text-muted empty-note">No exercises in this group yet.</p>
+    }
+  </div>
+
+  @if (hasData()) {
+    <app-bar-chart
+      [series]="chartSeries()"
+      [formatX]="formatX"
+      [formatY]="formatY()"
+      [ariaLabel]="ariaLabel()"
+      [height]="320"
+    />
+  } @else {
+    <div class="chart-empty">
+      <p class="text-muted">No sets logged for the selected exercises in this range.</p>
+      <a class="btn btn-secondary" routerLink="/weeks">Log a workout</a>
+    </div>
+  }
+
+  <div class="stats">
+    <app-stat-tile label="Sessions" [value]="sessionsText()" hint="in range" />
+    <app-stat-tile label="Frequency" [value]="perWeekText()" hint="per week" />
+    <app-stat-tile label="Consistency" [value]="consistencyText()" hint="weeks trained" />
+    <app-stat-tile
+      [label]="'Best ' + metricMeta().label"
+      [value]="bestText()"
+      [unit]="bestText() === '—' ? '' : metricUnitLabel()"
+      hint="best in range"
+    />
+    <app-stat-tile
+      label="Avg volume"
+      [value]="avgVolumeText()"
+      [unit]="avgVolumeText() === '—' ? '' : unit()"
+      hint="per session"
+    />
+    <app-stat-tile
+      [label]="'Progress ' + metricMeta().label"
+      [value]="progressText()"
+      [unit]="progressText() === '—' ? '' : metricUnitLabel()"
+      [tone]="progressTone()"
+      [hint]="progressHint()"
+    />
+  </div>
+</app-analytics-card>

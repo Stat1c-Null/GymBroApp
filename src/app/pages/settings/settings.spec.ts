@@ -4,6 +4,7 @@ import { SettingsComponent } from './settings';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
+import { EntryBackfillService } from '../../services/entry-backfill.service';
 
 /** Typed window onto SettingsComponent's `protected` members. */
 interface SettingsView {
@@ -44,6 +45,10 @@ describe('SettingsComponent', () => {
         { provide: SettingsService, useValue: settings },
         { provide: ToastService, useValue: toast },
         { provide: WorkoutService, useValue: { workouts: () => [] } },
+        {
+          provide: EntryBackfillService,
+          useValue: { backfillEntries: vi.fn().mockResolvedValue({ stamped: 0, skipped: 0 }) },
+        },
       ],
     }).compileComponents();
 

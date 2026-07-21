@@ -35,6 +35,12 @@ export interface ChartSeries {
   /** Draw a dot per point. */
   dots?: boolean;
   dashed?: boolean;
+  /**
+   * Fixed categorical slot for this series in a bar chart, so colour follows the
+   * entity rather than its position in the (filterable) rendered list. Ignored by
+   * the line chart, which colours by {@link role}.
+   */
+  colorIndex?: number;
 }
 
 export type TimeRangeKey = '30d' | '90d' | '6m' | '1y' | 'all';

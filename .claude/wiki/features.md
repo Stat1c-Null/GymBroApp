@@ -123,8 +123,10 @@ Two independent things live on this page:
 ## Analytics
 
 **Files**: `pages/analytics/` (`analytics.ts`/`.html`/`.css`, `goal-form-modal.ts`,
-`weight-burndown/`), `analytics/` (pure maths), `components/charts/` (reusable
-chart toolkit), `services/weight-analytics.service.ts`.
+`weight-burndown/`, `muscle-progress/`), `analytics/` (pure maths — `burndown.ts`,
+`exercise-metrics.ts`), `components/charts/` (reusable chart toolkit),
+`services/weight-analytics.service.ts`, `services/exercise-analytics.service.ts`,
+`services/entry-backfill.service.ts`.
 
 One range selector (30d/90d/6m/1y/All) scoping a stack of cards. The range lives on
 the page, never per-card — two cards showing different windows is how a dashboard
@@ -163,21 +165,38 @@ returns `null` on zero x-variance rather than a NaN that would silently poison e
 stat; goal reached → progress pinned to 1 and projection dropped; target date past →
 banner, and no pace to compare against.
 
+### Exercise progress (by muscle group)
+
+Compares how the user's lifts trend over time. Pick a **muscle group**
+(`SettingsService.muscleGroups()`, plus an `Unassigned` chip when orphans exist),
+multi-select the **exercises** to compare (capped at 8 — the categorical palette's
+distinct-colour limit), and toggle a **metric**: estimated 1RM (Epley, `reps === 1`
+returns the weight), heaviest set, total volume (`Σ reps×weight`), total reps, or set
+count. Each exercise is its own colour in a grouped **`app-bar-chart`** (colour follows
+the entity, never its rank); same-day sessions of one exercise are pooled before the
+metric is computed. Six stat tiles summarise training: sessions, frequency (per week),
+consistency (weeks trained / weeks in range), best-in-range, average volume per
+session, and a regression progress rate for the primary exercise. All maths is pure in
+`analytics/exercise-metrics.ts`; `ExerciseAnalyticsService` supplies the history.
+
+Unlike the burndown (which reads the flat `weights` collection), this needs **all
+logged sets across every week** — see the data-access design below.
+
 ### Adding another analytic
 
 Write a reducer in `analytics/` and a card that composes `AnalyticsCardComponent` +
-`LineChartComponent` + `StatTileComponent`. The chart layer should need no change —
+`LineChartComponent` (or `BarChartComponent`) + `StatTileComponent`. The chart layer should need no change —
 that's the test of the design.
 
-> **Blocker for any *workout* analytic**: there is no way to read workout history
-> across weeks today. `WeekService` subscribes to one `weekId` at a time; parent
-> `weeks/{weekId}` docs are never created (only `addDoc` into the `entries`
-> subcollection), so they're Firestore *phantom* docs that `getDocs` won't return —
-> you can't even enumerate which weeks exist; and `WeekEntry` has no `uid` field, so
-> `collectionGroup('entries')` can't be user-scoped. Cheapest fix: derive week ids
-> client-side by walking Mondays back N weeks with `mondayOf`/`toWeekId` and querying
-> each. This does **not** block the body-weight burndown — `weights` is a flat,
-> directly queryable collection.
+> **Reading workout history across weeks** (the burndown reads flat `weights`; a
+> *workout* analytic can't). `WeekService` subscribes to one `weekId` at a time, and
+> parent `weeks/{weekId}` docs are Firestore *phantoms* (only `addDoc` into `entries`
+> ever runs), so you can't enumerate weeks. This is **solved** for the exercise card:
+> every entry now carries a denormalized `uid` + `date` (set by `WeekService`), so
+> `ExerciseAnalyticsService` reads all history with one `collectionGroup('entries')`
+> query filtered by `uid`, and `EntryBackfillService` stamps old entries once. It
+> needs a Firebase-console collection-group index + security rule — see
+> [Database → Cross-week analytics reads](./database.md#cross-week-analytics-reads-the-exception).
 
 ## Changelog
 

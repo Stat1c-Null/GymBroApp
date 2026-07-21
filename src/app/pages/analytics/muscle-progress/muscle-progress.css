@@ -1,0 +1,105 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem 1.5rem;
+  margin-bottom: 1.1rem;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+/* Exercises span the full width so the chip cloud has room to wrap. */
+.controls + .control {
+  margin-bottom: 1.25rem;
+}
+
+.control-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.control-hint {
+  margin-left: 0.4rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* The metric toggle can outgrow a narrow card — let it scroll rather than wrap the
+   connected segmented control into a broken second row. */
+.segmented-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full, 999px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.chip:hover:not(:disabled):not(.selected) {
+  border-color: var(--border-strong, var(--primary));
+  color: var(--text-primary);
+}
+
+.chip.selected {
+  color: var(--primary-contrast, #fff);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.empty-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+}
+
+.chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+/* Same fixed-column grid as the burndown card: six tiles divide evenly as 2×3 on
+   phones and 3×2 from 560px, so no tile stretches to a lonely full-width row. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 560px) {
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

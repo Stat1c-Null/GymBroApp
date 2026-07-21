@@ -49,6 +49,7 @@ One document per user (`SettingsService`). Shape (`UserSettings`):
   muscleGroups?: string[];     // default MUSCLE_GROUPS constant if unset
   unit?: 'kg' | 'lbs';         // display unit; default 'lbs' — see below
   weightGoal?: WeightGoal | null;  // body-weight target driving /analytics
+  entriesBackfilledAt?: Timestamp; // set once the analytics uid/date back-fill runs
 }
 
 // weightGoal, when set:
@@ -119,6 +120,8 @@ Shape (`WeekEntry`):
     time?: number | null;      // seconds; optional, older entries lack it
   }[];
   createdAt: Timestamp;
+  uid?: string;                // owner — service-managed; enables cross-week analytics reads
+  date?: string;               // logical local YYYY-MM-DD (Monday + day); service-managed
 }
 ```
 
@@ -126,6 +129,39 @@ Only the *current* week's entries are subscribed to at a time — the
 `entries` signal re-subscribes via `switchMap` when `weekId` changes, so
 navigating Prev/Next week loads on demand rather than loading the user's
 entire history up front.
+
+### Cross-week analytics reads (the exception)
+
+The *exercise* analytics card (`/analytics`) needs every logged entry across all
+weeks at once — the opposite of the per-week subscription above.
+`ExerciseAnalyticsService` reads them with a Firestore **collection-group** query
+over every `entries` sub-collection, filtered `where('uid', '==', uid)`.
+
+That query is only possible because two fields are **denormalized onto every entry**,
+both set by the service on write (`WeekService.add`/`update`):
+
+- **`uid`** — Firestore can't scope a collection group to one user by path, so the
+  owner is stored on the doc and used both as the query filter and as the security
+  rule's guard.
+- **`date`** — the logical local `YYYY-MM-DD` (that week's Monday + `day`), so
+  analytics gets a stable timeline value without unwrapping the pending
+  `serverTimestamp`.
+
+Two pieces of **Firebase-console** setup this repo can't ship (no rules/index files):
+
+1. A **collection-group index** on `entries.uid` — the first query run surfaces a
+   console link that creates the exact index.
+2. A **security rule** permitting the owner-scoped collection-group read, e.g.
+   `match /{path=**}/entries/{entryId} { allow read: if resource.data.uid == request.auth.uid; }`.
+
+**Back-fill for old entries:** entries logged before this feature lack `uid`/`date`,
+so they'd be invisible to the query. `EntryBackfillService` stamps them once — an
+**additive, idempotent** migration (only `batch.update`s the two fields, skips
+already-stamped docs) triggered from the Analytics page on first open and gated by a
+persisted `settings.entriesBackfilledAt` flag. It finds entries by walking weekIds
+deterministically (Monday → Monday from the account's earliest activity), which
+sidesteps the Firestore "phantom parent" problem (a `weeks/{weekId}` parent doc may
+not exist even when its `entries` sub-collection does).
 
 ## Denormalization & consistency
 

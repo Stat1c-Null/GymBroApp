@@ -4,6 +4,7 @@ import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
 import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
 import { WeightUnit } from '../../services/weight.service';
+import { EntryBackfillService } from '../../services/entry-backfill.service';
 
 @Component({
   selector: 'app-settings',
@@ -16,11 +17,13 @@ export class SettingsComponent {
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
   private readonly workoutService = inject(WorkoutService);
+  private readonly backfill = inject(EntryBackfillService);
 
   protected readonly showSetTime = this.settings.showSetTime;
   protected readonly unit = this.settings.unit;
   protected readonly units: readonly WeightUnit[] = ['lbs', 'kg'];
   protected readonly saving = signal(false);
+  protected readonly backfilling = signal(false);
 
   protected async setUnit(unit: WeightUnit): Promise<void> {
     if (unit === this.unit()) return;
@@ -42,6 +45,27 @@ export class SettingsComponent {
       this.toast.show('Could not save your setting. Please try again.', 'error');
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /**
+   * Re-run the analytics back-fill on demand. Additive and idempotent — it only
+   * stamps `uid`/`date` onto entries missing them — so it's safe to run any time,
+   * e.g. to confirm every logged set is visible to the exercise analytics.
+   */
+  protected async rerunBackfill(): Promise<void> {
+    this.backfilling.set(true);
+    try {
+      const { stamped, skipped } = await this.backfill.backfillEntries();
+      await this.settings.markEntriesBackfilled();
+      this.toast.show(
+        `Analytics data refreshed — updated ${stamped}, already current ${skipped}.`,
+        'success'
+      );
+    } catch {
+      this.toast.show('Could not refresh analytics data. Please try again.', 'error');
+    } finally {
+      this.backfilling.set(false);
     }
   }
 

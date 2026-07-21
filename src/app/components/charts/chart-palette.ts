@@ -36,6 +36,15 @@ export interface ChartPalette {
   context: string;
   good: string;
   bad: string;
+  /**
+   * A fixed-order categorical scale for charts whose series are genuinely different
+   * entities (one exercise per series). Assigned by slot index, never cycled — a 9th
+   * series folds to "Other" rather than reusing slot 1. These are the dataviz skill's
+   * validated reference hues (worst adjacent CVD ΔE ≈ 9 light / 8 dark), stepped per
+   * theme; the always-present legend + sr-only table cover the few light-surface
+   * slots below 3:1 contrast.
+   */
+  categorical: string[];
 }
 
 /**
@@ -44,8 +53,8 @@ export interface ChartPalette {
  * The burndown's marks (actual, trend, plan, projection) are all the same measure,
  * differently derived. They're distinguished by dash, opacity and mark type, which
  * is the honest encoding for an emphasis chart. A categorical palette is only right
- * when series are genuinely different entities — when volume-per-muscle-group lands,
- * build one then and run the CVD validator against it.
+ * when series are genuinely different entities — that scale now exists as the
+ * `categorical` slot below (validated with the CVD script), used by the bar chart.
  */
 export const CHART_PALETTE: Record<Theme, ChartPalette> = {
   dark: {
@@ -58,6 +67,16 @@ export const CHART_PALETTE: Record<Theme, ChartPalette> = {
     context: 'hsl(0, 0%, 48%)', // --text-muted
     good: 'hsl(145, 65%, 50%)', // --success
     bad: 'hsl(0, 80%, 60%)', // --error
+    categorical: [
+      '#3987e5', // blue
+      '#008300', // green
+      '#d55181', // magenta
+      '#c98500', // yellow
+      '#199e70', // aqua
+      '#d95926', // orange
+      '#9085e9', // violet
+      '#e66767', // red
+    ],
   },
   light: {
     text: 'hsl(240, 5%, 40%)',
@@ -69,6 +88,16 @@ export const CHART_PALETTE: Record<Theme, ChartPalette> = {
     context: 'hsl(240, 5%, 58%)',
     good: 'hsl(145, 60%, 40%)',
     bad: 'hsl(0, 75%, 50%)',
+    categorical: [
+      '#2a78d6', // blue
+      '#008300', // green
+      '#e87ba4', // magenta
+      '#eda100', // yellow
+      '#1baf7a', // aqua
+      '#eb6834', // orange
+      '#4a3aa7', // violet
+      '#e34948', // red
+    ],
   },
 };
 
@@ -85,6 +114,15 @@ export function roleColor(role: SeriesRole, palette: ChartPalette): string {
     case 'goal':
       return palette.context;
   }
+}
+
+/**
+ * The fill/stroke colour for categorical slot `index`, by entity order. Not cycled:
+ * callers cap the series count so identity never collides; an out-of-range index
+ * falls back to the recessive context gray.
+ */
+export function categoricalColor(index: number, palette: ChartPalette): string {
+  return palette.categorical[index] ?? palette.context;
 }
 
 @Injectable({ providedIn: 'root' })
