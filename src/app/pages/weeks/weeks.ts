@@ -3,13 +3,27 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
-import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
+import {
+  WorkoutService,
+  Workout,
+  UNASSIGNED_GROUP,
+  CARDIO_GROUP,
+  isOrphanGroup,
+} from '../../services/workout.service';
 import { displayLifted, liftedToCanonical } from '../../services/weight.service';
+import {
+  displayDistance,
+  distanceToCanonical,
+  displayElevation,
+  elevationToCanonical,
+  formatPace,
+} from '../../services/cardio';
 import { ModalComponent } from '../../components/modal/modal';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 import {
   WeekService,
   WeekEntry,
+  CardioLog,
   DAY_LABELS,
   toWeekId,
   parseTime,
@@ -49,16 +63,18 @@ export class WeeksComponent {
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
 
-  /** Groups offered in the modal's dropdown. Adds the reserved "Unassigned"
-   *  bucket when the library holds workouts whose group was deleted, so those
-   *  workouts remain loggable instead of becoming unreachable. */
+  /** Groups offered in the modal's dropdown: the reserved "Cardio" category
+   *  always first, then the user's groups, then "Unassigned" when the
+   *  library holds workouts whose group was deleted (so those stay loggable
+   *  instead of becoming unreachable). */
   protected readonly muscleGroups = computed(() => {
     const groups = this.settings.muscleGroups();
     const known = new Set(groups);
-    const hasUnassigned = (this.workoutService.workouts() ?? []).some(
-      (w) => !known.has(w.muscleGroup)
+    const hasUnassigned = (this.workoutService.workouts() ?? []).some((w) =>
+      isOrphanGroup(w.muscleGroup, known)
     );
-    return hasUnassigned ? [...groups, UNASSIGNED_GROUP] : groups;
+    const list = [CARDIO_GROUP, ...groups];
+    return hasUnassigned ? [...list, UNASSIGNED_GROUP] : list;
   });
 
   /** Per-workout time tracking for the open modal. Defaults from the global
@@ -118,7 +134,7 @@ export class WeeksComponent {
     const all = this.workoutService.workouts() ?? [];
     if (group === UNASSIGNED_GROUP) {
       const known = new Set(this.settings.muscleGroups());
-      return all.filter((w) => !known.has(w.muscleGroup));
+      return all.filter((w) => isOrphanGroup(w.muscleGroup, known));
     }
     return all.filter((w) => w.muscleGroup === group);
   });
@@ -126,6 +142,30 @@ export class WeeksComponent {
   private readonly selectedWorkout = computed(
     () => this.filteredWorkouts().find((w) => w.id === this.modalWorkoutId()) ?? null
   );
+
+  /** Whether the modal's selected group is the reserved Cardio category —
+   *  swaps the reps/weight/sets form for the single-session cardio fields. */
+  protected readonly isCardio = computed(() => this.modalMuscleGroup() === CARDIO_GROUP);
+  protected readonly distanceUnit = this.settings.distanceUnit;
+  /** Elevation is shown in feet alongside miles, meters alongside km. */
+  protected readonly elevationUnitLabel = computed(() =>
+    this.distanceUnit() === 'mi' ? 'ft' : 'm'
+  );
+
+  // --- Cardio session fields (one per logged day — no per-set breakdown). ---
+  protected readonly cardioTimeText = signal('');
+  protected readonly cardioDistance = signal<number | null>(null);
+  protected readonly cardioHeartRate = signal<number | null>(null);
+  protected readonly cardioElevation = signal<number | null>(null);
+
+  /** Read-only pace derived from the entered duration and distance. */
+  protected readonly cardioPace = computed(() => {
+    const seconds = parseTime(this.cardioTimeText());
+    const distance = this.cardioDistance();
+    const unit = this.distanceUnit();
+    const canonicalDistance = distance == null ? null : distanceToCanonical(distance, unit);
+    return formatPace(seconds, canonicalDistance, unit);
+  });
 
   protected openAddModal(day: number): void {
     this.editingId.set(null);
@@ -135,6 +175,7 @@ export class WeeksComponent {
     this.modalTrackTime.set(this.settings.showSetTime());
     this.rowPool = [];
     this.setRows.set([]);
+    this.resetCardioFields();
     this.error.set('');
     this.showModal.set(true);
   }
@@ -144,13 +185,21 @@ export class WeeksComponent {
     this.activeDay.set(entry.day);
     this.modalMuscleGroup.set(entry.muscleGroup);
     this.modalWorkoutId.set(entry.workoutId);
-    this.modalTrackTime.set(
-      entry.trackTime ?? entry.sets.some((s) => s.time != null)
-    );
-    this.rowPool = entry.sets.map((s) =>
-      this.seedRow(s.weight, s.reps, formatTime(s.time ?? null))
-    );
-    this.setRows.set(this.rowPool.slice());
+    if (entry.muscleGroup === CARDIO_GROUP) {
+      this.rowPool = [];
+      this.setRows.set([]);
+      this.modalTrackTime.set(false);
+      this.seedCardioFields(entry.cardio ?? null);
+    } else {
+      this.modalTrackTime.set(
+        entry.trackTime ?? entry.sets.some((s) => s.time != null)
+      );
+      this.rowPool = entry.sets.map((s) =>
+        this.seedRow(s.weight, s.reps, formatTime(s.time ?? null))
+      );
+      this.setRows.set(this.rowPool.slice());
+      this.resetCardioFields();
+    }
     this.error.set('');
     this.showModal.set(true);
   }
@@ -172,13 +221,20 @@ export class WeeksComponent {
 
   /** After a workout is created from within the logging flow, select it in the
    *  add-to-week form. Sets the group/workout signals directly (not via
-   *  onMuscleGroupChange) so the in-progress set rows are preserved. The new
-   *  workout appears in filteredWorkouts() once the live library stream emits. */
+   *  onMuscleGroupChange) so the in-progress log is preserved for other groups.
+   *  The new workout appears in filteredWorkouts() once the live library
+   *  stream emits. */
   protected onWorkoutCreated(workout: Workout): void {
     this.showCreateWorkout.set(false);
     this.modalMuscleGroup.set(workout.muscleGroup);
     this.modalWorkoutId.set(workout.id ?? '');
-    this.reseedWeights(workout.usualWeight ?? null);
+    if (workout.muscleGroup === CARDIO_GROUP) {
+      this.rowPool = [];
+      this.setRows.set([]);
+      this.resetCardioFields();
+    } else {
+      this.reseedWeights(workout.usualWeight ?? null);
+    }
   }
 
   protected onMuscleGroupChange(group: string): void {
@@ -186,10 +242,15 @@ export class WeeksComponent {
     this.modalWorkoutId.set('');
     this.rowPool = [];
     this.setRows.set([]);
+    this.resetCardioFields();
   }
 
   protected onWorkoutChange(id: string): void {
     this.modalWorkoutId.set(id);
+    if (this.isCardio()) {
+      this.resetCardioFields();
+      return;
+    }
     // Re-default each set's weight to the newly chosen workout's usual weight.
     this.reseedWeights(this.selectedWorkout()?.usualWeight ?? null);
   }
@@ -211,14 +272,26 @@ export class WeeksComponent {
       this.error.set('Please select a workout.');
       return;
     }
-    const sets = this.setRows();
-    if (sets.length === 0) {
-      this.error.set('Add at least one set.');
-      return;
-    }
-    if (sets.some((s) => s.reps == null || s.reps <= 0)) {
-      this.error.set('Enter the reps for every set.');
-      return;
+
+    const isCardio = this.isCardio();
+    let cardio: CardioLog | null = null;
+
+    if (isCardio) {
+      cardio = this.buildCardioLog();
+      if (!cardio) {
+        this.error.set('Enter a duration and distance.');
+        return;
+      }
+    } else {
+      const sets = this.setRows();
+      if (sets.length === 0) {
+        this.error.set('Add at least one set.');
+        return;
+      }
+      if (sets.some((s) => s.reps == null || s.reps <= 0)) {
+        this.error.set('Enter the reps for every set.');
+        return;
+      }
     }
 
     const day = this.activeDay();
@@ -235,18 +308,23 @@ export class WeeksComponent {
     this.saving.set(true);
     this.error.set('');
     const trackTime = this.modalTrackTime();
-    const data = {
+    const base = {
       day,
       workoutId: workout.id,
       workoutName: workout.name,
       muscleGroup: workout.muscleGroup,
-      trackTime,
-      sets: sets.map((s) => ({
-        reps: s.reps,
-        weight: this.toCanonicalWeight(s),
-        time: trackTime ? parseTime(s.timeText) : null,
-      })),
     };
+    const data: Omit<WeekEntry, 'id' | 'createdAt'> = cardio
+      ? { ...base, sets: [], cardio }
+      : {
+          ...base,
+          trackTime,
+          sets: this.setRows().map((s) => ({
+            reps: s.reps,
+            weight: this.toCanonicalWeight(s),
+            time: trackTime ? parseTime(s.timeText) : null,
+          })),
+        };
     const id = this.editingId();
 
     try {
@@ -279,6 +357,11 @@ export class WeeksComponent {
     sets: { weight: number | null }[],
     baseMessage: string
   ): Promise<string> {
+    // Cardio workouts have no usualWeight concept — sets is always [] for
+    // them anyway, but bail explicitly rather than relying on that.
+    if (workout.muscleGroup === CARDIO_GROUP) {
+      return baseMessage;
+    }
     const newUsual = uniformWeight(sets);
     if (newUsual == null || newUsual === workout.usualWeight) {
       return baseMessage;
@@ -308,9 +391,29 @@ export class WeeksComponent {
     }
   }
 
+  /** Compact summary shown under a day-entry's name — dispatches on whether
+   *  the entry is a cardio session or a strength log. */
+  protected entrySummary(entry: WeekEntry): string {
+    return entry.muscleGroup === CARDIO_GROUP && entry.cardio
+      ? this.cardioSummary(entry.cardio)
+      : this.setSummary(entry);
+  }
+
+  /** e.g. "30:00 · 5 mi · 6:00 /mi". Parts with no value are omitted. */
+  private cardioSummary(cardio: CardioLog): string {
+    const unit = this.distanceUnit();
+    const distance = displayDistance(cardio.distance, unit);
+    const parts = [
+      cardio.time != null ? formatTime(cardio.time) : null,
+      distance != null ? `${distance} ${unit}` : null,
+      formatPace(cardio.time, cardio.distance, unit),
+    ];
+    return parts.filter((p): p is string => p != null).join(' · ');
+  }
+
   /** Compact per-set summary, e.g. "12×60 · 10×60 (1:30) · 8×65 lbs".
    *  Times are shown whenever a set has one stored — independent of the toggle. */
-  protected setSummary(entry: WeekEntry): string {
+  private setSummary(entry: WeekEntry): string {
     const parts = entry.sets.map((s) => {
       const weight = displayLifted(s.weight, this.settings.unit());
       const base = weight != null ? `${s.reps}×${weight}` : `${s.reps}`;
@@ -348,5 +451,40 @@ export class WeeksComponent {
     if (row.weight == null) return null;
     if (row.weight === row.seededWeight) return row.canonicalWeight;
     return liftedToCanonical(row.weight, this.settings.unit());
+  }
+
+  private resetCardioFields(): void {
+    this.cardioTimeText.set('');
+    this.cardioDistance.set(null);
+    this.cardioHeartRate.set(null);
+    this.cardioElevation.set(null);
+  }
+
+  /** Seed the cardio fields from a stored (canonical) log when editing. */
+  private seedCardioFields(cardio: CardioLog | null): void {
+    const unit = this.distanceUnit();
+    this.cardioTimeText.set(formatTime(cardio?.time ?? null));
+    this.cardioDistance.set(displayDistance(cardio?.distance ?? null, unit));
+    this.cardioHeartRate.set(cardio?.heartRate ?? null);
+    this.cardioElevation.set(displayElevation(cardio?.elevation ?? null, unit));
+  }
+
+  /** The cardio log to save from the current form fields, or `null` if the
+   *  required duration/distance aren't both present (a positive distance). */
+  private buildCardioLog(): CardioLog | null {
+    const unit = this.distanceUnit();
+    const time = parseTime(this.cardioTimeText());
+    const distance = this.cardioDistance();
+    const canonicalDistance = distance == null ? null : distanceToCanonical(distance, unit);
+    if (time == null || canonicalDistance == null || canonicalDistance <= 0) {
+      return null;
+    }
+    const elevation = this.cardioElevation();
+    return {
+      time,
+      distance: canonicalDistance,
+      heartRate: this.cardioHeartRate(),
+      elevation: elevation == null ? null : elevationToCanonical(elevation, unit),
+    };
   }
 }

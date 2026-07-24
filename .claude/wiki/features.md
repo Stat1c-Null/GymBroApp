@@ -81,6 +81,16 @@ never touch `usualWeight`. The success toast is extended to mention the
 change (e.g. "Usual weight updated to 135 lbs."); a failure to update the
 library doesn't affect the already-saved log entry or its toast.
 
+Cardio logging: selecting the reserved "Cardio" group (always first in the
+dropdown) swaps the whole form — no muscle-group-style sets, just one
+session per day: duration, distance, a read-only computed pace, and optional
+heart rate/elevation. `WeeksComponent.isCardio` drives the swap;
+`entrySummary()` dispatches each day-entry's display line to either the
+cardio or strength summary depending on `muscleGroup`. See
+[Database → The Cardio category](./database.md#the-cardio-category) for the
+data shape and unit handling. The usual-weight write-back above is a no-op
+for cardio entries (they carry no `sets` to check).
+
 ## Workouts (exercise library)
 
 **Files**: `services/workout.service.ts`, `pages/workouts/`,
@@ -103,6 +113,14 @@ any `WeekEntry` that referenced it (those keep their denormalized
 `workoutName`/`muscleGroup`; see
 [Database → Denormalization](./database.md#denormalization--consistency)).
 
+A reserved **"Cardio"** category (`CARDIO_GROUP`) always appears first — even
+with zero exercises — for every user, with no migration needed (same trick
+as the `Unassigned` bucket: injected in the UI, never persisted to
+`settings.muscleGroups`). Creating/editing a Cardio-category workout hides
+the usual/max weight inputs entirely; see
+[Database → The Cardio category](./database.md#the-cardio-category).
+Logging one is a Weeks-page feature — see below.
+
 ## Weights (body weight tracking)
 
 **Files**: `services/weight.service.ts`, `pages/weights/`.
@@ -117,18 +135,24 @@ persisted so the list can display both without a live conversion on read.
 
 **Files**: `services/settings.service.ts`, `pages/settings/`.
 
-Two independent things live on this page:
+Three independent things live on this page:
 
 1. **"Track time per set" toggle** — sets `showSetTime`, the *default* for
    the Weeks page's per-log time-tracking toggle (each log entry can still
    override it locally, see Weeks above).
-2. **Muscle group management** — add/rename/delete the groups used
+2. **Weight unit / distance unit toggles** — lbs/kg and mi/km
+   display-preference switches. Neither rewrites stored data, only how it's
+   shown — see [Database → Weight unit handling](./database.md#weight-unit-handling)
+   and [Database → Distance unit handling](./database.md#distance-unit-handling).
+3. **Muscle group management** — add/rename/delete the groups used
    throughout Workouts and Weeks. Rename and delete both cascade into
    `WorkoutService` via an atomic batch — see
    [Database → Denormalization & consistency](./database.md#denormalization--consistency)
    for exactly how, and why it has to be atomic. Deleting a group shows a
    confirmation banner stating how many workouts will move to `Unassigned`
-   before committing.
+   before committing. The reserved `Cardio` category can't be created,
+   renamed, or targeted this way (checked case-insensitively) — see
+   [Database → The Cardio category](./database.md#the-cardio-category).
 
 ## Analytics
 
@@ -191,6 +215,13 @@ session, and a regression progress rate for the primary exercise. All maths is p
 
 Unlike the burndown (which reads the flat `weights` collection), this needs **all
 logged sets across every week** — see the data-access design below.
+
+Cardio workouts are excluded here entirely (their reps/weight-based metrics
+above don't apply) rather than folded into the `Unassigned` chip —
+`ExerciseAnalyticsService.exercisesInGroup` and `MuscleProgressComponent`'s
+group list both use `isOrphanGroup()` (`workout.service.ts`), which
+special-cases `CARDIO_GROUP` for exactly this reason. A dedicated cardio
+analytics view would be separate, future work.
 
 ### Adding another analytic
 

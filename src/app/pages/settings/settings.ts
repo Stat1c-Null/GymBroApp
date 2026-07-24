@@ -2,8 +2,9 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WorkoutService, UNASSIGNED_GROUP, CARDIO_GROUP } from '../../services/workout.service';
 import { WeightUnit } from '../../services/weight.service';
+import { DistanceUnit } from '../../services/cardio';
 import { EntryBackfillService } from '../../services/entry-backfill.service';
 
 @Component({
@@ -22,6 +23,8 @@ export class SettingsComponent {
   protected readonly showSetTime = this.settings.showSetTime;
   protected readonly unit = this.settings.unit;
   protected readonly units: readonly WeightUnit[] = ['lbs', 'kg'];
+  protected readonly distanceUnit = this.settings.distanceUnit;
+  protected readonly distanceUnits: readonly DistanceUnit[] = ['mi', 'km'];
   protected readonly saving = signal(false);
   protected readonly backfilling = signal(false);
 
@@ -30,6 +33,18 @@ export class SettingsComponent {
     this.saving.set(true);
     try {
       await this.settings.setUnit(unit);
+    } catch {
+      this.toast.show('Could not save your setting. Please try again.', 'error');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async setDistanceUnit(unit: DistanceUnit): Promise<void> {
+    if (unit === this.distanceUnit()) return;
+    this.saving.set(true);
+    try {
+      await this.settings.setDistanceUnit(unit);
     } catch {
       this.toast.show('Could not save your setting. Please try again.', 'error');
     } finally {
@@ -91,6 +106,10 @@ export class SettingsComponent {
       this.toast.show(`"${UNASSIGNED_GROUP}" is reserved and cannot be used.`, 'error');
       return;
     }
+    if (name.toLowerCase() === CARDIO_GROUP.toLowerCase()) {
+      this.toast.show(`"${CARDIO_GROUP}" is reserved and cannot be used.`, 'error');
+      return;
+    }
     const current = this.settings.muscleGroups();
     if (current.some((g) => g.toLowerCase() === name.toLowerCase())) {
       this.toast.show(`"${name}" already exists.`, 'error');
@@ -132,6 +151,10 @@ export class SettingsComponent {
     }
     if (newName.toLowerCase() === UNASSIGNED_GROUP.toLowerCase()) {
       this.toast.show(`"${UNASSIGNED_GROUP}" is reserved and cannot be used.`, 'error');
+      return;
+    }
+    if (newName.toLowerCase() === CARDIO_GROUP.toLowerCase()) {
+      this.toast.show(`"${CARDIO_GROUP}" is reserved and cannot be used.`, 'error');
       return;
     }
     const current = this.settings.muscleGroups();

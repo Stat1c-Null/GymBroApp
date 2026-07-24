@@ -17,7 +17,7 @@ import { ExerciseAnalyticsService } from '../../../services/exercise-analytics.s
 import { SettingsService } from '../../../services/settings.service';
 import { displayLifted } from '../../../services/weight.service';
 import { WeekService } from '../../../services/week.service';
-import { UNASSIGNED_GROUP, WorkoutService } from '../../../services/workout.service';
+import { UNASSIGNED_GROUP, WorkoutService, isOrphanGroup } from '../../../services/workout.service';
 
 /** Never compare more colours than the categorical palette can keep distinct. */
 const MAX_SELECTED = 8;
@@ -63,7 +63,7 @@ export class MuscleProgressComponent {
   protected readonly groups = computed<string[]>(() => {
     const list = [...this.svc.groups()];
     const known = new Set(list);
-    const hasOrphan = (this.workouts.workouts() ?? []).some((w) => !known.has(w.muscleGroup));
+    const hasOrphan = (this.workouts.workouts() ?? []).some((w) => isOrphanGroup(w.muscleGroup, known));
     if (hasOrphan) list.push(UNASSIGNED_GROUP);
     return list;
   });

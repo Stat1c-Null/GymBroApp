@@ -52,6 +52,29 @@
         }
       </div>
     </div>
+
+    <div class="setting-item">
+      <div class="setting-label">
+        <span class="setting-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12Z" />
+            <circle cx="12" cy="9" r="2.5" />
+          </svg>
+        </span>
+        <div class="setting-text">
+          <span>Distance unit</span>
+          <p class="setting-hint">The unit cardio distance and elevation are shown in.
+            Your logged sessions aren't changed — only how they're displayed.</p>
+        </div>
+      </div>
+      <div class="segmented" role="group" aria-label="Distance unit">
+        @for (u of distanceUnits; track u) {
+          <button type="button" [class.active]="distanceUnit() === u" [disabled]="saving()"
+            [attr.aria-pressed]="distanceUnit() === u" (click)="setDistanceUnit(u)">{{ u }}</button>
+        }
+      </div>
+    </div>
   </div>
 
   <!-- Muscle Groups -->

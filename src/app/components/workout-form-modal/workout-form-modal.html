@@ -26,18 +26,20 @@
       </select>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label" for="workout-usual">Usual weight ({{ unit() }})</label>
-        <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
-          [(ngModel)]="usualWeight" name="usualWeight" />
+    @if (muscleGroup !== cardioGroup) {
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="workout-usual">Usual weight ({{ unit() }})</label>
+          <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
+            [(ngModel)]="usualWeight" name="usualWeight" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="workout-max">Max weight ({{ unit() }})</label>
+          <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
+            [(ngModel)]="maxWeight" name="maxWeight" />
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="workout-max">Max weight ({{ unit() }})</label>
-        <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
-          [(ngModel)]="maxWeight" name="maxWeight" />
-      </div>
-    </div>
+    }
 
     <button type="submit" class="btn btn-primary btn-full mt-2" id="save-workout-btn" [disabled]="saving()">
       @if (saving()) {

@@ -29,6 +29,27 @@ export type MuscleGroup = string;
  */
 export const UNASSIGNED_GROUP = 'Unassigned';
 
+/**
+ * Reserved category for cardio exercises (running, cycling, etc). Like
+ * {@link UNASSIGNED_GROUP}, it's never stored in `settings.muscleGroups` and
+ * can't be renamed or deleted — it's injected wherever muscle groups are
+ * listed, so every user has it immediately with no per-user migration.
+ * Exercises in it use different logging fields than reps/weight — a single
+ * time/distance session per day, see `WeekEntry.cardio` in `week.service.ts`
+ * and the cardio form in `weeks.ts`.
+ */
+export const CARDIO_GROUP = 'Cardio';
+
+/**
+ * Whether `muscleGroup` should be treated as belonging to the reserved
+ * {@link UNASSIGNED_GROUP} bucket: missing from the user's known group list,
+ * and not the reserved {@link CARDIO_GROUP} (which has its own home and must
+ * never be swept into Unassigned just because it's never in that list).
+ */
+export function isOrphanGroup(muscleGroup: string, knownGroups: ReadonlySet<string>): boolean {
+  return !knownGroups.has(muscleGroup) && muscleGroup !== CARDIO_GROUP;
+}
+
 export interface Workout {
   id?: string;
   name: string;

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsComponent } from './settings';
 import { SettingsService } from '../../services/settings.service';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
+import { WorkoutService, MUSCLE_GROUPS, CARDIO_GROUP } from '../../services/workout.service';
 import { EntryBackfillService } from '../../services/entry-backfill.service';
 
 /** Typed window onto SettingsComponent's `protected` members. */
@@ -12,11 +12,18 @@ interface SettingsView {
   showSetTime: () => boolean;
   requestDeleteGroup: (group: string) => void;
   confirmDeleteGroup: () => Promise<void>;
+  newGroupName: string;
+  addGroup: () => Promise<void>;
+  startEditGroup: (group: string) => void;
+  editingGroupName: string;
+  confirmRenameGroup: () => Promise<void>;
+  setDistanceUnit: (unit: 'mi' | 'km') => Promise<void>;
 }
 
 describe('SettingsComponent', () => {
   let view: SettingsView;
   let showSetTimeValue: boolean;
+  let distanceUnitValue: 'mi' | 'km';
   let settings: {
     showSetTime: () => boolean;
     setShowSetTime: ReturnType<typeof vi.fn>;
@@ -24,11 +31,14 @@ describe('SettingsComponent', () => {
     setMuscleGroups: ReturnType<typeof vi.fn>;
     renameGroup: ReturnType<typeof vi.fn>;
     deleteGroup: ReturnType<typeof vi.fn>;
+    distanceUnit: () => 'mi' | 'km';
+    setDistanceUnit: ReturnType<typeof vi.fn>;
   };
   let toast: { show: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     showSetTimeValue = false;
+    distanceUnitValue = 'mi';
     settings = {
       showSetTime: () => showSetTimeValue,
       setShowSetTime: vi.fn().mockResolvedValue(undefined),
@@ -36,6 +46,8 @@ describe('SettingsComponent', () => {
       setMuscleGroups: vi.fn().mockResolvedValue(undefined),
       renameGroup: vi.fn().mockResolvedValue(0),
       deleteGroup: vi.fn().mockResolvedValue(0),
+      distanceUnit: () => distanceUnitValue,
+      setDistanceUnit: vi.fn().mockResolvedValue(undefined),
     };
     toast = { show: vi.fn() };
 
@@ -85,5 +97,42 @@ describe('SettingsComponent', () => {
 
     expect(settings.deleteGroup).toHaveBeenCalledWith('Legs');
     expect(toast.show).toHaveBeenCalledWith('"Legs" removed.', 'success');
+  });
+
+  it('rejects creating a custom group named "Cardio" (reserved, case-insensitive)', async () => {
+    view.newGroupName = 'cardio';
+
+    await view.addGroup();
+
+    expect(settings.setMuscleGroups).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledWith(
+      `"${CARDIO_GROUP}" is reserved and cannot be used.`,
+      'error'
+    );
+  });
+
+  it('rejects renaming a group to "Cardio" (reserved, case-insensitive)', async () => {
+    view.startEditGroup('Legs');
+    view.editingGroupName = 'CARDIO';
+
+    await view.confirmRenameGroup();
+
+    expect(settings.renameGroup).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledWith(
+      `"${CARDIO_GROUP}" is reserved and cannot be used.`,
+      'error'
+    );
+  });
+
+  it('changes the distance unit', async () => {
+    await view.setDistanceUnit('km');
+
+    expect(settings.setDistanceUnit).toHaveBeenCalledWith('km');
+  });
+
+  it('does nothing when selecting the already-active distance unit', async () => {
+    await view.setDistanceUnit('mi');
+
+    expect(settings.setDistanceUnit).not.toHaveBeenCalled();
   });
 });

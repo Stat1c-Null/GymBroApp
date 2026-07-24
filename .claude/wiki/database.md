@@ -123,7 +123,13 @@ Shape (`WeekEntry`):
     reps: number | null;
     weight: number | null;
     time?: number | null;      // seconds; optional, older entries lack it
-  }[];
+  }[];                         // [] for cardio entries — see below
+  cardio?: {                   // present only when muscleGroup is CARDIO_GROUP
+    time: number | null;        // seconds
+    distance: number | null;    // canonical miles
+    heartRate?: number | null;  // average bpm
+    elevation?: number | null;  // canonical feet
+  };
   createdAt: Timestamp;
   uid?: string;                // owner — service-managed; enables cross-week analytics reads
   date?: string;               // logical local YYYY-MM-DD (Monday + day); service-managed
@@ -206,6 +212,47 @@ computed client-side as belonging to this bucket — see `groupedWorkouts` in
 a group literally named "Unassigned" (checked case-insensitively in
 `settings.ts`).
 
+### The `Cardio` category
+
+`CARDIO_GROUP = 'Cardio'` (`workout.service.ts`) is a second reserved,
+never-persisted category, alongside `Unassigned` — but unlike `Unassigned`,
+it's meant to always be visible, even with zero workouts in it, and always
+**first** wherever muscle groups are listed, so every user has it immediately
+with no per-user migration. It's injected into:
+
+- `WorkoutsComponent.groupedWorkouts` (`workouts.ts`) — placed first,
+  unconditionally (not filtered by item count like the other groups), so it's
+  always the top section; its workout cards hide the usual/max weight stats.
+- `WorkoutFormModalComponent.muscleGroupsForForm` — listed first in the
+  dropdown, selectable when creating/editing a workout; picking it hides the
+  usual/max weight inputs and the form always saves `null`/`null` for those
+  fields.
+- `WeeksComponent.muscleGroups` (`weeks.ts`) — listed first in the
+  add/edit-entry modal's group dropdown, swapping the whole form (below).
+- `SettingsComponent.addGroup`/`confirmRenameGroup` — rejects a custom group
+  named "Cardio" (case-insensitively), the same way `Unassigned` is blocked.
+
+Because `CARDIO_GROUP` is never in `settings.muscleGroups`, every place that
+computes "is this workout orphaned → bucket it under Unassigned" has to
+explicitly exclude it, or cardio workouts would wrongly land in Unassigned.
+That check is centralized as `isOrphanGroup(muscleGroup, knownGroups)`
+(`workout.service.ts`), used by `workouts.ts`, `weeks.ts`,
+`exercise-analytics.service.ts`, and `muscle-progress.ts`.
+
+**Logging a cardio entry** is a single session per day — no per-set
+breakdown, unlike strength exercises. `WeekEntry` gains an optional `cardio`
+field (see below) instead of populating `sets`, which stays `[]`. Whether an
+entry is cardio is read from its already-denormalized `muscleGroup`, not a
+separate flag. `WeeksComponent` swaps in a duration/distance/heart-rate/
+elevation form when the selected group is Cardio (`isCardio` computed); pace
+is always computed from duration ÷ distance and shown read-only, never typed
+(`formatPace` in `cardio.ts`) — the user chose this over free-typing pace to
+avoid two numbers ever disagreeing. Both duration and distance are required
+to save; heart rate and elevation are optional. The existing "usual weight"
+auto-update feature (`WeeksComponent.syncUsualWeight`) explicitly bails out
+for Cardio workouts — the concept doesn't apply, and `sets` being `[]` would
+make it a no-op anyway, but the guard is explicit for clarity.
+
 ## Weight unit handling
 
 There **is** a per-user display unit: `UserSettings.unit` (`'kg' | 'lbs'`, default
@@ -240,3 +287,17 @@ with and writing the original canonical value back when the displayed value is
 unchanged — see `SetRow.canonicalWeight`/`seededWeight` in `weeks.ts` and the `seeded`
 /`canonical` pair in `workout-form-modal.ts`. If you add another weight input, do the
 same.
+
+## Distance unit handling
+
+Same pattern as [Weight unit handling](#weight-unit-handling), for cardio. A
+per-user display unit, `UserSettings.distanceUnit` (`'mi' | 'km'`, default
+`'mi'`), exposed as `SettingsService.distanceUnit()` and toggled on the
+Settings page next to the weight-unit toggle. `WeekEntry.cardio.distance` and
+`.elevation` are always *stored* canonically — miles and feet respectively
+(`CARDIO_DISTANCE_STORAGE_UNIT` in `cardio.ts`) — regardless of display unit;
+convert with `displayDistance`/`distanceToCanonical` and
+`displayElevation`/`elevationToCanonical` (or format pace directly with
+`formatPace`), never rewrite stored rows. `cardio.ts` has no Angular or
+Firestore imports — it's pure conversion/formatting maths, unit-tested as
+plain functions, same spirit as `analytics/exercise-metrics.ts`.

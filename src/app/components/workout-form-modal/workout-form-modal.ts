@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WorkoutService, Workout, UNASSIGNED_GROUP, CARDIO_GROUP } from '../../services/workout.service';
 import { displayLifted, liftedToCanonical } from '../../services/weight.service';
 import { SettingsService } from '../../services/settings.service';
 import { ModalComponent } from '../modal/modal';
@@ -34,7 +34,10 @@ export class WorkoutFormModalComponent {
   readonly saved = output<Workout>();
 
   protected readonly unit = this.settings.unit;
+  /** Exposed so the template can hide the weight fields for this group. */
+  protected readonly cardioGroup = CARDIO_GROUP;
   protected readonly muscleGroupsForForm = computed(() => [
+    CARDIO_GROUP,
     ...this.settings.muscleGroups(),
     UNASSIGNED_GROUP,
   ]);
@@ -96,8 +99,16 @@ export class WorkoutFormModalComponent {
     const data = {
       name: this.name.trim(),
       muscleGroup: this.muscleGroup,
-      usualWeight: this.toCanonical(this.usualWeight, this.seeded.usual, this.canonical.usual),
-      maxWeight: this.toCanonical(this.maxWeight, this.seeded.max, this.canonical.max),
+      // Cardio exercises don't collect a usual/max lifted weight — the form
+      // hides those inputs for this group, so ignore whatever's left in them.
+      usualWeight:
+        this.muscleGroup === CARDIO_GROUP
+          ? null
+          : this.toCanonical(this.usualWeight, this.seeded.usual, this.canonical.usual),
+      maxWeight:
+        this.muscleGroup === CARDIO_GROUP
+          ? null
+          : this.toCanonical(this.maxWeight, this.seeded.max, this.canonical.max),
     };
     const id = this.editingWorkout()?.id ?? null;
 

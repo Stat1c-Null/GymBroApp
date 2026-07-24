@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import type { WritableSignal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WeeksComponent } from './weeks';
 import {
@@ -10,7 +11,8 @@ import {
   formatTime,
   uniformWeight,
 } from '../../services/week.service';
-import { WorkoutService } from '../../services/workout.service';
+import { WorkoutService, CARDIO_GROUP } from '../../services/workout.service';
+import { distanceToCanonical, elevationToCanonical } from '../../services/cardio';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
 
@@ -37,6 +39,13 @@ interface WeeksView {
   modalMuscleGroup: () => string;
   modalWorkoutId: () => string;
   filteredWorkouts: () => { id?: string }[];
+  isCardio: () => boolean;
+  cardioTimeText: WritableSignal<string>;
+  cardioDistance: WritableSignal<number | null>;
+  cardioHeartRate: WritableSignal<number | null>;
+  cardioElevation: WritableSignal<number | null>;
+  cardioPace: () => string | null;
+  entrySummary: (entry: WeekEntry) => string;
 }
 
 const SAMPLE_WORKOUT = {
@@ -55,6 +64,20 @@ const ORPHAN_WORKOUT = {
   muscleGroup: 'Deleted Group',
   usualWeight: 40,
   maxWeight: 50,
+};
+
+const CARDIO_WORKOUT: {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  usualWeight: number | null;
+  maxWeight: number | null;
+} = {
+  id: 'w3',
+  name: 'Morning Run',
+  muscleGroup: CARDIO_GROUP,
+  usualWeight: null,
+  maxWeight: null,
 };
 
 describe('week.service date helpers', () => {
@@ -111,6 +134,7 @@ describe('uniformWeight', () => {
 describe('WeeksComponent', () => {
   let view: WeeksView;
   let entriesData: WeekEntry[];
+  let distanceUnitValue: 'mi' | 'km';
   let service: {
     entries: () => WeekEntry[];
     rangeLabel: () => string;
@@ -126,12 +150,13 @@ describe('WeeksComponent', () => {
   };
   let toast: { show: ReturnType<typeof vi.fn> };
   let workoutService: {
-    workouts: () => typeof SAMPLE_WORKOUT[];
+    workouts: () => (typeof SAMPLE_WORKOUT | typeof CARDIO_WORKOUT)[];
     update: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
     entriesData = [];
+    distanceUnitValue = 'mi';
     service = {
       entries: () => entriesData,
       rangeLabel: () => 'Jun 16 – Jun 22, 2026',
@@ -147,7 +172,7 @@ describe('WeeksComponent', () => {
     };
     toast = { show: vi.fn() };
     workoutService = {
-      workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT],
+      workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT, CARDIO_WORKOUT],
       update: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -163,6 +188,7 @@ describe('WeeksComponent', () => {
             showSetTime: () => false,
             unit: () => 'lbs',
             muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
+            distanceUnit: () => distanceUnitValue,
           },
         },
       ],
@@ -183,13 +209,16 @@ describe('WeeksComponent', () => {
     expect(rows.every((r) => r.reps === null)).toBe(true);
   });
 
-  it('offers the Unassigned bucket and its workouts when a group was deleted', () => {
+  it('lists the reserved Cardio group first, and offers Unassigned when a group was deleted', () => {
     view.openAddModal(0);
 
+    expect(view.muscleGroups()[0]).toBe(CARDIO_GROUP);
     expect(view.muscleGroups()).toContain('Unassigned');
 
     view.onMuscleGroupChange('Unassigned');
 
+    // Cardio workouts are excluded from Unassigned even though 'Cardio' isn't
+    // in the known muscleGroups list either — it has its own reserved home.
     expect(view.filteredWorkouts().map((w) => w.id)).toEqual(['w2']);
   });
 
@@ -452,6 +481,20 @@ describe('WeeksComponent', () => {
     expect(view.setRows().every((r) => r.weight === 50)).toBe(true);
   });
 
+  it('selects a newly created Cardio workout and resets the strength log', () => {
+    view.openAddModal(0); // group defaults to 'Chest'
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(2);
+
+    view.onWorkoutCreated({ id: 'new-cardio', muscleGroup: CARDIO_GROUP, usualWeight: null });
+
+    expect(view.modalMuscleGroup()).toBe(CARDIO_GROUP);
+    expect(view.modalWorkoutId()).toBe('new-cardio');
+    expect(view.setRows()).toHaveLength(0);
+    expect(view.cardioTimeText()).toBe('');
+    expect(view.cardioDistance()).toBeNull();
+  });
+
   it('deletes an entry once the user confirms', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
@@ -481,5 +524,182 @@ describe('WeeksComponent', () => {
     });
 
     expect(service.remove).not.toHaveBeenCalled();
+  });
+
+  describe('cardio logging', () => {
+    it('starts with blank cardio fields when switching to Cardio', () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+
+      expect(view.isCardio()).toBe(true);
+      expect(view.cardioTimeText()).toBe('');
+      expect(view.cardioDistance()).toBeNull();
+      expect(view.cardioHeartRate()).toBeNull();
+      expect(view.cardioElevation()).toBeNull();
+    });
+
+    it('resets cardio fields when a different cardio workout is chosen', () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(5);
+
+      view.onWorkoutChange('w3'); // re-selecting (or picking another) starts fresh
+
+      expect(view.cardioTimeText()).toBe('');
+      expect(view.cardioDistance()).toBeNull();
+    });
+
+    it('computes pace from the entered duration and distance', () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(5);
+
+      expect(view.cardioPace()).toBe('6:00 /mi');
+    });
+
+    it('saves a cardio session with duration, distance, heart rate and elevation', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(5);
+      view.cardioHeartRate.set(150);
+      view.cardioElevation.set(200);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith({
+        day: 0,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: { time: 1800, distance: 5, heartRate: 150, elevation: 200 },
+      });
+      expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+      // Cardio entries carry no sets, so the usual-weight sync must no-op.
+      expect(workoutService.update).not.toHaveBeenCalled();
+    });
+
+    it('converts a km/meters display entry back to canonical miles/feet on submit', async () => {
+      distanceUnitValue = 'km';
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(8.05);
+      view.cardioElevation.set(305);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith({
+        day: 0,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: {
+          time: 1800,
+          distance: distanceToCanonical(8.05, 'km'),
+          heartRate: null,
+          elevation: elevationToCanonical(305, 'km'),
+        },
+      });
+    });
+
+    it('requires both a duration and a distance before saving a cardio session', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      // distance left blank
+
+      await view.onSubmit();
+
+      expect(service.add).not.toHaveBeenCalled();
+      expect(view.error()).toBeTruthy();
+    });
+
+    it('seeds cardio fields from an existing entry when editing', () => {
+      const entry: WeekEntry = {
+        id: 'cardio-entry',
+        day: 2,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: { time: 1800, distance: 5, heartRate: 150, elevation: 200 },
+      };
+
+      view.openEditModal(entry);
+
+      expect(view.isCardio()).toBe(true);
+      expect(view.cardioTimeText()).toBe('30:00');
+      expect(view.cardioDistance()).toBe(5);
+      expect(view.cardioHeartRate()).toBe(150);
+      expect(view.cardioElevation()).toBe(200);
+    });
+
+    it('updates an existing cardio entry', async () => {
+      const entry: WeekEntry = {
+        id: 'cardio-entry',
+        day: 2,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: { time: 1800, distance: 5, heartRate: null, elevation: null },
+      };
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+      view.cardioDistance.set(6);
+
+      await view.onSubmit();
+
+      expect(service.update).toHaveBeenCalledWith('cardio-entry', {
+        day: 2,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: { time: 1800, distance: 6, heartRate: null, elevation: null },
+      });
+    });
+
+    it('summarizes a cardio entry with duration, distance, and pace', () => {
+      const entry: WeekEntry = {
+        id: 'cardio-entry',
+        day: 2,
+        workoutId: 'w3',
+        workoutName: 'Morning Run',
+        muscleGroup: CARDIO_GROUP,
+        sets: [],
+        cardio: { time: 1800, distance: 5, heartRate: null, elevation: null },
+      };
+
+      const summary = view.entrySummary(entry);
+
+      expect(summary).toContain('30:00');
+      expect(summary).toContain('5 mi');
+      expect(summary).toContain('6:00 /mi');
+    });
+
+    it('summarizes a strength entry by sets, unchanged', () => {
+      const entry: WeekEntry = {
+        id: 'strength-entry',
+        day: 0,
+        workoutId: 'w1',
+        workoutName: 'Bench Press',
+        muscleGroup: 'Chest',
+        sets: [{ reps: 10, weight: 60 }],
+      };
+
+      expect(view.entrySummary(entry)).toBe('10×60 lbs');
+    });
   });
 });

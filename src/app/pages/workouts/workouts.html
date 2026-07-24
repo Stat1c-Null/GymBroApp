@@ -16,33 +16,35 @@
 
   <!-- List, grouped by muscle group -->
   @if (workouts(); as list) {
-    @if (list.length) {
-      <div class="group-list">
-        @for (g of groupedWorkouts(); track g.group) {
-          <div class="group glass-card">
-            <button class="group-header" type="button" (click)="toggleGroup(g.group)"
-              [attr.aria-expanded]="isExpanded(g.group)">
-              <span class="group-title">{{ g.group }}</span>
-              <span class="group-count">{{ g.items.length }}</span>
-              <svg class="group-chevron" [class.open]="isExpanded(g.group)" width="20" height="20" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+    <div class="group-list">
+      @for (g of groupedWorkouts(); track g.group) {
+        <div class="group glass-card">
+          <button class="group-header" type="button" (click)="toggleGroup(g.group)"
+            [attr.aria-expanded]="isExpanded(g.group)">
+            <span class="group-title">{{ g.group }}</span>
+            <span class="group-count">{{ g.items.length }}</span>
+            <svg class="group-chevron" [class.open]="isExpanded(g.group)" width="20" height="20" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
 
-            @if (isExpanded(g.group)) {
-              <div class="group-body">
+          @if (isExpanded(g.group)) {
+            <div class="group-body">
+              @if (g.items.length) {
                 @for (w of g.items; track w.id) {
                   <div class="list-card group-card">
                     <div class="list-info">
                       <span class="list-name">{{ w.name }}</span>
                     </div>
                     <div class="list-meta">
-                      <div class="list-stats">
-                        <span>usual <strong>{{ w.usualWeight | lifted: unit() }}</strong></span>
-                        <span class="dot">·</span>
-                        <span>max <strong>{{ w.maxWeight | lifted: unit() }}</strong></span>
-                      </div>
+                      @if (g.group !== cardioGroup) {
+                        <div class="list-stats">
+                          <span>usual <strong>{{ w.usualWeight | lifted: unit() }}</strong></span>
+                          <span class="dot">·</span>
+                          <span>max <strong>{{ w.maxWeight | lifted: unit() }}</strong></span>
+                        </div>
+                      }
                       <div class="list-actions">
                         <button class="list-action" (click)="openModal(w)" aria-label="Edit workout">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -60,16 +62,14 @@
                     </div>
                   </div>
                 }
-              </div>
-            }
-          </div>
-        }
-      </div>
-    } @else {
-      <div class="list-empty glass-card">
-        <p>No workouts yet — add your first one to start building your library.</p>
-      </div>
-    }
+              } @else {
+                <p class="text-muted">No exercises yet.</p>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
   } @else {
     <div class="list-loading">
       <span class="spinner"></span>

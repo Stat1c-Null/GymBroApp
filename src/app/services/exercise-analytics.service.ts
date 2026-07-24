@@ -12,7 +12,7 @@ import { startOfLocalDay } from '../analytics/time-series';
 import { ExerciseSession } from '../analytics/exercise-metrics';
 import { AuthService } from './auth.service';
 import { SettingsService } from './settings.service';
-import { UNASSIGNED_GROUP, Workout, WorkoutService } from './workout.service';
+import { UNASSIGNED_GROUP, Workout, WorkoutService, isOrphanGroup } from './workout.service';
 import { WeekEntry, parseDateId } from './week.service';
 import { toDate } from './firestore-utils';
 
@@ -72,7 +72,7 @@ export class ExerciseAnalyticsService {
     const all = this.workouts.workouts() ?? [];
     const known = new Set(this.groups());
     return all.filter((w) => {
-      const effective = known.has(w.muscleGroup) ? w.muscleGroup : UNASSIGNED_GROUP;
+      const effective = isOrphanGroup(w.muscleGroup, known) ? UNASSIGNED_GROUP : w.muscleGroup;
       return effective === group;
     });
   }

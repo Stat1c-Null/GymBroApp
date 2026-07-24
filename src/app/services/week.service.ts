@@ -33,6 +33,20 @@ export interface WorkoutSet {
   time?: number | null; // duration in seconds (optional; older entries lack it)
 }
 
+/**
+ * A single logged cardio session (one per day — no per-set breakdown, unlike
+ * strength exercises). Present on a {@link WeekEntry} only when its
+ * `muscleGroup` is the reserved `CARDIO_GROUP`; `sets` stays `[]` for those
+ * entries. `distance`/`elevation` are canonical (miles/feet) — see `cardio.ts`
+ * for the display-unit conversion, mirroring how weight is stored in pounds.
+ */
+export interface CardioLog {
+  time: number | null; // seconds
+  distance: number | null; // canonical miles
+  heartRate?: number | null; // average bpm
+  elevation?: number | null; // canonical feet
+}
+
 /** "m:ss" (or bare seconds) → total seconds; null for blank/invalid input. */
 export function parseTime(text: string): number | null {
   const trimmed = text.trim();
@@ -76,7 +90,9 @@ export interface WeekEntry {
   workoutName: string; // denormalized (survives library rename/delete)
   muscleGroup: MuscleGroup; // denormalized
   trackTime?: boolean; // per-entry time-per-set tracking (older entries lack it)
-  sets: WorkoutSet[]; // length = number of sets
+  sets: WorkoutSet[]; // length = number of sets; [] for cardio entries
+  /** Present only when `muscleGroup` is the reserved Cardio category. */
+  cardio?: CardioLog;
   createdAt?: unknown; // Firestore serverTimestamp → newest on top
   /** Owner uid, denormalized so the cross-week analytics collection-group query
    *  can scope to one user. Set by the service on every write; absent on entries

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkoutFormModalComponent } from './workout-form-modal';
-import { WorkoutService, Workout, MUSCLE_GROUPS } from '../../services/workout.service';
+import { WorkoutService, Workout, MUSCLE_GROUPS, CARDIO_GROUP } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
 
@@ -14,6 +14,7 @@ interface FormView {
   onSubmit: () => Promise<void>;
   error: () => string;
   isEditing: () => boolean;
+  muscleGroupsForForm: () => string[];
 }
 
 describe('WorkoutFormModalComponent', () => {
@@ -124,5 +125,27 @@ describe('WorkoutFormModalComponent', () => {
     fixture.detectChanges();
 
     expect(view.muscleGroup).toBe('Back');
+  });
+
+  it('lists the reserved Cardio group first in the muscle-group dropdown', () => {
+    open();
+    expect(view.muscleGroupsForForm()[0]).toBe(CARDIO_GROUP);
+  });
+
+  it('stores null usual/max weight for a Cardio-category workout regardless of entered values', async () => {
+    open();
+    view.name = 'Morning Run';
+    view.muscleGroup = CARDIO_GROUP;
+    view.usualWeight = 60; // leftover/irrelevant; must not be saved for Cardio
+    view.maxWeight = 80;
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith({
+      name: 'Morning Run',
+      muscleGroup: CARDIO_GROUP,
+      usualWeight: null,
+      maxWeight: null,
+    });
   });
 });

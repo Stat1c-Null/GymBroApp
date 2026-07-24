@@ -64,7 +64,7 @@
                     </button>
                   </div>
                 </div>
-                <span class="day-entry-sets">{{ setSummary(e) }}</span>
+                <span class="day-entry-sets">{{ entrySummary(e) }}</span>
               </div>
             } @empty {
               <p class="day-empty">No workouts</p>
@@ -125,38 +125,70 @@
     </div>
 
     @if (modalWorkoutId()) {
-      <div class="form-group">
-        <label class="form-label" for="week-sets">Number of sets</label>
-        <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
-          [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
-      </div>
+      @if (isCardio()) {
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="cardio-time">Duration (m:ss)</label>
+            <input class="form-input" id="cardio-time" type="text" placeholder="m:ss"
+              [ngModel]="cardioTimeText()" (ngModelChange)="cardioTimeText.set($event)" name="cardioTime" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cardio-distance">Distance ({{ distanceUnit() }})</label>
+            <input class="form-input" id="cardio-distance" type="number" min="0" step="0.01" placeholder="0"
+              [ngModel]="cardioDistance()" (ngModelChange)="cardioDistance.set($event)" name="cardioDistance" />
+          </div>
+        </div>
 
-      <div class="form-group setting-item">
-        <span class="modal-toggle-label">Track time per set</span>
-        <button type="button" class="theme-switch" [class.active]="modalTrackTime()"
-          (click)="toggleModalTrackTime()" [attr.aria-pressed]="modalTrackTime()"
-          aria-label="Toggle time tracking for this workout">
-          <span class="switch-knob"></span>
-        </button>
-      </div>
-    }
+        @if (cardioPace(); as pace) {
+          <p class="form-hint">Pace: {{ pace }}</p>
+        }
 
-    @if (setRows().length) {
-      <div class="set-rows">
-        @for (s of setRows(); track $index) {
-          <div class="set-row" [class.with-time]="modalTrackTime()">
-            <span class="set-index">Set {{ $index + 1 }}</span>
-            <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
-              [name]="'reps' + $index" aria-label="Reps" />
-            <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
-              [name]="'weight' + $index" aria-label="Weight" />
-            @if (modalTrackTime()) {
-              <input class="form-input" type="text" placeholder="m:ss"
-                [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="cardio-heart-rate">Avg. heart rate (optional)</label>
+            <input class="form-input" id="cardio-heart-rate" type="number" min="0" placeholder="bpm"
+              [ngModel]="cardioHeartRate()" (ngModelChange)="cardioHeartRate.set($event)" name="cardioHeartRate" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cardio-elevation">Elevation gain (optional, {{ elevationUnitLabel() }})</label>
+            <input class="form-input" id="cardio-elevation" type="number" min="0" placeholder="0"
+              [ngModel]="cardioElevation()" (ngModelChange)="cardioElevation.set($event)" name="cardioElevation" />
+          </div>
+        </div>
+      } @else {
+        <div class="form-group">
+          <label class="form-label" for="week-sets">Number of sets</label>
+          <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
+            [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
+        </div>
+
+        <div class="form-group setting-item">
+          <span class="modal-toggle-label">Track time per set</span>
+          <button type="button" class="theme-switch" [class.active]="modalTrackTime()"
+            (click)="toggleModalTrackTime()" [attr.aria-pressed]="modalTrackTime()"
+            aria-label="Toggle time tracking for this workout">
+            <span class="switch-knob"></span>
+          </button>
+        </div>
+
+        @if (setRows().length) {
+          <div class="set-rows">
+            @for (s of setRows(); track $index) {
+              <div class="set-row" [class.with-time]="modalTrackTime()">
+                <span class="set-index">Set {{ $index + 1 }}</span>
+                <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
+                  [name]="'reps' + $index" aria-label="Reps" />
+                <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
+                  [name]="'weight' + $index" aria-label="Weight" />
+                @if (modalTrackTime()) {
+                  <input class="form-input" type="text" placeholder="m:ss"
+                    [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
+                }
+              </div>
             }
           </div>
         }
-      </div>
+      }
     }
 
     <button type="submit" class="btn btn-primary btn-full mt-2" [disabled]="saving()">

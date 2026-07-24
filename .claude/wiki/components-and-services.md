@@ -8,7 +8,7 @@ via `inject()`, never provided per-component.
 | Service | Backs | Key state (signals) | Key methods |
 |---|---|---|---|
 | `AuthService` | Firebase Auth | `currentUser`, `displayName` (computed) | `signUp`, `signIn`, `signInWithGoogle`, `resetPassword`, `logout`, `requireUid(action?)` |
-| `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups`, `unit`, `weightGoal`, `entriesBackfilledAt` (all computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `setUnit`, `setWeightGoal`, `clearWeightGoal`, `renameGroup`, `deleteGroup`, `markEntriesBackfilled` |
+| `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups`, `unit`, `distanceUnit`, `weightGoal`, `entriesBackfilledAt` (all computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `setUnit`, `setDistanceUnit`, `setWeightGoal`, `clearWeightGoal`, `renameGroup`, `deleteGroup`, `markEntriesBackfilled` |
 | `WorkoutService` | `users/{uid}/workouts` | `workouts` (`undefined` while loading) | `add`, `update`, `remove`, `stageGroupReassign(batch, from, to)` |
 | `WeekService` | `users/{uid}/weeks/{weekId}/entries` | `entries`, `currentWeekStart`, `weekId`, `rangeLabel`, `isCurrentWeek`, `today` | `add`, `update`, `remove`, `previousWeek`, `nextWeek`, `goToThisWeek` |
 | `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove` |

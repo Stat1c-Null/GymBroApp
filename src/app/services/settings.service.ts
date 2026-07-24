@@ -5,6 +5,7 @@ import { of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 import { MUSCLE_GROUPS, UNASSIGNED_GROUP, WorkoutService } from './workout.service';
 import { LIFTED_STORAGE_UNIT, WeightGoal, WeightUnit } from './weight.service';
+import { CARDIO_DISTANCE_STORAGE_UNIT, DistanceUnit } from './cardio';
 
 /** Per-user app preferences. Extend here as more settings are added. */
 export interface UserSettings {
@@ -12,6 +13,8 @@ export interface UserSettings {
   muscleGroups?: string[];
   /** Unit to display weights in. Absent means the historical default, pounds. */
   unit?: WeightUnit;
+  /** Unit to display cardio distance/elevation in. Absent means miles. */
+  distanceUnit?: DistanceUnit;
   /** The body-weight target driving the burndown chart. `null` means "no goal". */
   weightGoal?: WeightGoal | null;
   /** When the one-time analytics uid/date back-fill last completed. Absent = never run. */
@@ -53,6 +56,11 @@ export class SettingsService {
     () => this.settings()?.unit ?? LIFTED_STORAGE_UNIT
   );
 
+  /** The unit to display cardio distance/elevation in. Defaults to miles. */
+  readonly distanceUnit = computed<DistanceUnit>(
+    () => this.settings()?.distanceUnit ?? CARDIO_DISTANCE_STORAGE_UNIT
+  );
+
   /** The user's body-weight goal, or `null` if they haven't set one. */
   readonly weightGoal = computed<WeightGoal | null>(
     () => this.settings()?.weightGoal ?? null
@@ -66,6 +74,11 @@ export class SettingsService {
   async setUnit(unit: WeightUnit): Promise<void> {
     const uid = this.auth.requireUid('change settings');
     await setDoc(this.settingsDoc(uid), { unit }, { merge: true });
+  }
+
+  async setDistanceUnit(unit: DistanceUnit): Promise<void> {
+    const uid = this.auth.requireUid('change settings');
+    await setDoc(this.settingsDoc(uid), { distanceUnit: unit }, { merge: true });
   }
 
   async setWeightGoal(goal: WeightGoal): Promise<void> {

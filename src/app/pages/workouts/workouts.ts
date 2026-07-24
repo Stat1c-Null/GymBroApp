@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ToastService } from '../../services/toast.service';
-import { WorkoutService, Workout, UNASSIGNED_GROUP } from '../../services/workout.service';
+import { WorkoutService, Workout, UNASSIGNED_GROUP, CARDIO_GROUP, isOrphanGroup } from '../../services/workout.service';
 import { LiftedWeightPipe } from '../../components/lifted-weight-pipe';
 import { SettingsService } from '../../services/settings.service';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
@@ -18,15 +18,24 @@ export class WorkoutsComponent {
   private readonly toast = inject(ToastService);
 
   protected readonly workouts = this.service.workouts;
+  /** Exposed so the template can hide weight stats for the reserved Cardio group. */
+  protected readonly cardioGroup = CARDIO_GROUP;
 
   protected readonly groupedWorkouts = computed(() => {
     const list = this.workouts() ?? [];
     const groups = this.settings.muscleGroups();
     const knownGroups = new Set(groups);
-    const result = groups
-      .map((group) => ({ group, items: list.filter((w) => w.muscleGroup === group) }))
-      .filter((g) => g.items.length > 0);
-    const unassigned = list.filter((w) => !knownGroups.has(w.muscleGroup));
+    // Reserved category — always shown first, even with zero exercises
+    // (unlike Unassigned, which only appears when something lands there).
+    const result = [
+      { group: CARDIO_GROUP, items: list.filter((w) => w.muscleGroup === CARDIO_GROUP) },
+      ...groups
+        .map((group) => ({ group, items: list.filter((w) => w.muscleGroup === group) }))
+        .filter((g) => g.items.length > 0),
+    ];
+    const unassigned = list.filter(
+      (w) => isOrphanGroup(w.muscleGroup, knownGroups)
+    );
     if (unassigned.length > 0) {
       result.push({ group: UNASSIGNED_GROUP, items: unassigned });
     }

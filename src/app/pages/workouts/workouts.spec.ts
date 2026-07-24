@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkoutsComponent } from './workouts';
-import { WorkoutService, MUSCLE_GROUPS } from '../../services/workout.service';
+import { WorkoutService, MUSCLE_GROUPS, CARDIO_GROUP } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
 
@@ -77,7 +77,7 @@ describe('WorkoutsComponent', () => {
     expect(service.remove).not.toHaveBeenCalled();
   });
 
-  it('groups workouts by muscle group in preset order, omitting empty groups', () => {
+  it('groups workouts by muscle group in preset order, omitting empty groups except the reserved Cardio one', () => {
     workoutsData = [
       { id: '1', name: 'Curl', muscleGroup: 'Arms' },
       { id: '2', name: 'Bench', muscleGroup: 'Chest' },
@@ -86,9 +86,27 @@ describe('WorkoutsComponent', () => {
 
     const groups = view.groupedWorkouts();
 
-    // Chest comes before Arms in MUSCLE_GROUPS, and Legs (empty) is dropped.
-    expect(groups.map((g) => g.group)).toEqual(['Chest', 'Arms']);
+    // Chest comes before Arms in MUSCLE_GROUPS, Legs (empty) is dropped, and the
+    // reserved Cardio section always appears first — even with zero items.
+    expect(groups.map((g) => g.group)).toEqual([CARDIO_GROUP, 'Chest', 'Arms']);
     expect(groups.find((g) => g.group === 'Arms')?.items).toHaveLength(2);
+    expect(groups.find((g) => g.group === CARDIO_GROUP)?.items).toEqual([]);
+  });
+
+  it('places cardio workouts under the reserved Cardio group, not Unassigned', () => {
+    workoutsData = [
+      { id: '1', name: 'Run', muscleGroup: CARDIO_GROUP },
+      { id: '2', name: 'Orphaned Lift', muscleGroup: 'Deleted Group' },
+    ];
+
+    const groups = view.groupedWorkouts();
+
+    expect(groups.find((g) => g.group === CARDIO_GROUP)?.items.map((w) => w.name)).toEqual([
+      'Run',
+    ]);
+    expect(groups.find((g) => g.group === 'Unassigned')?.items.map((w) => w.name)).toEqual([
+      'Orphaned Lift',
+    ]);
   });
 
   it('toggles a group between expanded and collapsed', () => {
