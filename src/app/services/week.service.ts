@@ -58,6 +58,17 @@ export function formatTime(seconds: number | null): string {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
+/** The single weight shared by every non-blank set, or null if they disagree
+ *  or none has a weight. Blank (null) sets — e.g. bodyweight-only sets — are
+ *  ignored rather than treated as disagreement. */
+export function uniformWeight(sets: { weight: number | null }[]): number | null {
+  const weights = sets
+    .map((s) => s.weight)
+    .filter((w): w is number => w != null);
+  if (weights.length === 0) return null;
+  return weights.every((w) => w === weights[0]) ? weights[0] : null;
+}
+
 export interface WeekEntry {
   id?: string;
   day: number; // 0 = Mon … 6 = Sun

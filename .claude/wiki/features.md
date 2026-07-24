@@ -71,6 +71,16 @@ seconds.
 Duplicate-guard: logging the same workout twice on the same day (outside of
 editing that same entry) is rejected client-side before the write.
 
+Usual-weight write-back: on save (add or edit), if every set that has a
+weight entered agrees on one value (`uniformWeight()` in `week.service.ts`;
+blank/bodyweight sets are ignored) and it differs from the workout's current
+`usualWeight`, the library entry is updated to match
+(`WeeksComponent.syncUsualWeight`, `weeks.ts`) — so the next time this
+workout is logged, the form seeds from the latest weight. Disagreeing sets
+never touch `usualWeight`. The success toast is extended to mention the
+change (e.g. "Usual weight updated to 135 lbs."); a failure to update the
+library doesn't affect the already-saved log entry or its toast.
+
 ## Workouts (exercise library)
 
 **Files**: `services/workout.service.ts`, `pages/workouts/`,

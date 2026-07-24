@@ -8,6 +8,7 @@ import {
   toWeekId,
   parseTime,
   formatTime,
+  uniformWeight,
 } from '../../services/week.service';
 import { WorkoutService } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
@@ -85,6 +86,28 @@ describe('week.service date helpers', () => {
   });
 });
 
+describe('uniformWeight', () => {
+  it('returns the common weight when every set matches', () => {
+    expect(uniformWeight([{ weight: 60 }, { weight: 60 }, { weight: 60 }])).toBe(60);
+  });
+
+  it('returns null when set weights disagree', () => {
+    expect(uniformWeight([{ weight: 60 }, { weight: 65 }])).toBeNull();
+  });
+
+  it('ignores blank sets and matches on the remaining weights', () => {
+    expect(uniformWeight([{ weight: 60 }, { weight: null }, { weight: 60 }])).toBe(60);
+  });
+
+  it('returns null when every set is blank', () => {
+    expect(uniformWeight([{ weight: null }, { weight: null }])).toBeNull();
+  });
+
+  it('returns the weight for a single set', () => {
+    expect(uniformWeight([{ weight: 45 }])).toBe(45);
+  });
+});
+
 describe('WeeksComponent', () => {
   let view: WeeksView;
   let entriesData: WeekEntry[];
@@ -102,6 +125,10 @@ describe('WeeksComponent', () => {
     remove: ReturnType<typeof vi.fn>;
   };
   let toast: { show: ReturnType<typeof vi.fn> };
+  let workoutService: {
+    workouts: () => typeof SAMPLE_WORKOUT[];
+    update: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     entriesData = [];
@@ -119,12 +146,16 @@ describe('WeeksComponent', () => {
       remove: vi.fn().mockResolvedValue(undefined),
     };
     toast = { show: vi.fn() };
+    workoutService = {
+      workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT],
+      update: vi.fn().mockResolvedValue(undefined),
+    };
 
     await TestBed.configureTestingModule({
       imports: [WeeksComponent],
       providers: [
         { provide: WeekService, useValue: service },
-        { provide: WorkoutService, useValue: { workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT] } },
+        { provide: WorkoutService, useValue: workoutService },
         { provide: ToastService, useValue: toast },
         {
           provide: SettingsService,
@@ -212,6 +243,78 @@ describe('WeeksComponent', () => {
       ],
     });
     expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+  });
+
+  it('updates the workout usual weight and mentions it in the toast when every set weight agrees and differs from the saved value', async () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(3);
+    view.setRows().forEach((r) => {
+      r.reps = 10;
+      r.weight = 70;
+    });
+
+    await view.onSubmit();
+
+    expect(workoutService.update).toHaveBeenCalledWith('w1', {
+      name: 'Bench Press',
+      muscleGroup: 'Chest',
+      maxWeight: 80,
+      usualWeight: 70,
+    });
+    expect(toast.show).toHaveBeenCalledWith(
+      'Workout added! Usual weight updated to 70 lbs.',
+      'success'
+    );
+  });
+
+  it('does not touch the usual weight when the logged sets disagree', async () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(2);
+    const rows = view.setRows();
+    rows[0].reps = 10;
+    rows[0].weight = 70;
+    rows[1].reps = 10;
+    rows[1].weight = 75;
+
+    await view.onSubmit();
+
+    expect(workoutService.update).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+  });
+
+  it('does not write back the usual weight when the logged weight matches the saved value', async () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(2);
+    view.setRows().forEach((r) => (r.reps = 10)); // weight stays seeded at 60
+
+    await view.onSubmit();
+
+    expect(workoutService.update).not.toHaveBeenCalled();
+  });
+
+  it('ignores blank-weight sets when checking whether the logged sets agree', async () => {
+    view.openAddModal(0);
+    view.onWorkoutChange('w1');
+    view.onSetsCountChange(3);
+    const rows = view.setRows();
+    rows[0].reps = 10;
+    rows[0].weight = 70;
+    rows[1].reps = 12;
+    rows[1].weight = null; // e.g. a bodyweight set
+    rows[2].reps = 10;
+    rows[2].weight = 70;
+
+    await view.onSubmit();
+
+    expect(workoutService.update).toHaveBeenCalledWith('w1', {
+      name: 'Bench Press',
+      muscleGroup: 'Chest',
+      maxWeight: 80,
+      usualWeight: 70,
+    });
   });
 
   it('parses an entered m:ss time into seconds on submit when tracking is on', async () => {

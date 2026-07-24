@@ -82,6 +82,11 @@ The user's exercise library (`WorkoutService`). Shape (`Workout`):
 
 Ordered `orderBy('createdAt', 'desc')` — newest workout first.
 
+`usualWeight` is normally set from the Workouts page's create/edit form, but
+`WeeksComponent` (Weeks page) also writes it: logging a day's sets with a
+uniform weight different from the current value pushes that weight back onto
+the workout — see [Features → Weeks](./features.md#weeks-weekly-workout-logging).
+
 ### `users/{uid}/weights/{weightId}`
 
 Body-weight log (`WeightService`). Shape (`WeightEntry`):

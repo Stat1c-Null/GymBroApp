@@ -14,6 +14,7 @@ import {
   toWeekId,
   parseTime,
   formatTime,
+  uniformWeight,
 } from '../../services/week.service';
 
 /** A per-set row in the modal. `timeText` is the raw m:ss text the user edits;
@@ -249,18 +250,50 @@ export class WeeksComponent {
     const id = this.editingId();
 
     try {
+      const baseMessage = id ? 'Workout updated!' : 'Workout added!';
       if (id) {
         await this.service.update(id, data);
-        this.toast.show('Workout updated!', 'success');
       } else {
         await this.service.add(data);
-        this.toast.show('Workout added!', 'success');
       }
+      this.toast.show(
+        await this.syncUsualWeight(workout, data.sets, baseMessage),
+        'success'
+      );
       this.closeModal();
     } catch {
       this.error.set('Could not save your workout. Please try again.');
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** After a log save, if every set shares one weight and it differs from the
+   *  workout's saved usual weight, push it back into the library so the next
+   *  time this workout is logged, the form seeds from the latest value.
+   *  Blank (no-weight) sets are ignored — see {@link uniformWeight}. Returns
+   *  the toast message to show (the base message, with a suffix if the usual
+   *  weight changed). */
+  private async syncUsualWeight(
+    workout: Workout,
+    sets: { weight: number | null }[],
+    baseMessage: string
+  ): Promise<string> {
+    const newUsual = uniformWeight(sets);
+    if (newUsual == null || newUsual === workout.usualWeight) {
+      return baseMessage;
+    }
+    try {
+      await this.workoutService.update(workout.id!, {
+        name: workout.name,
+        muscleGroup: workout.muscleGroup,
+        maxWeight: workout.maxWeight,
+        usualWeight: newUsual,
+      });
+      const shown = displayLifted(newUsual, this.settings.unit());
+      return `${baseMessage} Usual weight updated to ${shown} ${this.settings.unit()}.`;
+    } catch {
+      return baseMessage;
     }
   }
 
