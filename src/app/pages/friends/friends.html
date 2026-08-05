@@ -1,0 +1,159 @@
+<section class="page">
+  <div class="list-header">
+    <div>
+      <h1 class="page-title">Friends</h1>
+      <p class="page-subtitle">Find your gym bros and keep each other honest.</p>
+    </div>
+  </div>
+
+  <!-- Incoming requests: only shown when there's something to answer. -->
+  @if (incoming()?.length) {
+    <h2 class="friends-heading">Friend requests</h2>
+    <div class="list mb-3">
+      @for (request of incoming(); track request.id) {
+        <div class="list-card glass-card">
+          <div class="list-info">
+            <span class="friend-avatar">{{ initialFor(counterpartOf(request)) }}</span>
+            <span class="list-name">{{ nameFor(counterpartOf(request)) }}</span>
+          </div>
+          <div class="friend-actions">
+            <button class="btn btn-primary friend-btn" (click)="onAccept(request)"
+              [disabled]="busy() === request.id">Accept</button>
+            <button class="btn btn-secondary friend-btn" (click)="onDecline(request)"
+              [disabled]="busy() === request.id">Decline</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Sent requests still waiting on an answer. -->
+  @if (outgoing()?.length) {
+    <h2 class="friends-heading">Sent requests</h2>
+    <div class="list mb-3">
+      @for (request of outgoing(); track request.id) {
+        <div class="list-card glass-card">
+          <div class="list-info">
+            <span class="friend-avatar">{{ initialFor(counterpartOf(request)) }}</span>
+            <span class="list-name">{{ nameFor(counterpartOf(request)) }}</span>
+          </div>
+          <div class="friend-actions">
+            <span class="friend-pending">Pending</span>
+            <button class="btn btn-secondary friend-btn" (click)="onCancel(request)"
+              [disabled]="busy() === request.id">Cancel</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- The friend list itself. -->
+  <h2 class="friends-heading">Your friends</h2>
+  @if (friends(); as list) {
+    <div class="list">
+      @for (friend of list; track friend.id) {
+        <div class="list-card glass-card">
+          <div class="list-info">
+            <span class="friend-avatar">{{ initialFor(counterpartOf(friend)) }}</span>
+            <span class="list-name">{{ nameFor(counterpartOf(friend)) }}</span>
+          </div>
+          <div class="list-actions">
+            <button class="list-action list-delete" (click)="onRemove(friend)"
+              [disabled]="busy() === friend.id" [attr.aria-label]="'Remove ' + nameFor(counterpartOf(friend))">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M17 11h6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      } @empty {
+        <div class="list-empty glass-card">
+          <p>No friends yet — search below to add your first one.</p>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
+
+  <!-- Search / browse the directory. -->
+  <h2 class="friends-heading mt-3">Add a friend</h2>
+  <div class="glass-card friend-search">
+    <form class="friend-search-form" (ngSubmit)="onSearch()">
+      <input class="form-input" id="friend-search" type="search" name="term" autocomplete="off"
+        placeholder="Search by name or email" [(ngModel)]="term" />
+      <button type="submit" class="btn btn-primary friend-btn" [disabled]="searching()">
+        @if (searching()) {
+          <span class="spinner"></span>
+        } @else {
+          Search
+        }
+      </button>
+    </form>
+    <p class="friend-hint">
+      Leave the box empty and hit Search to browse everyone who's signed up.
+      Names match from the start ("Mik" finds "Mikita"); an email has to match exactly.
+    </p>
+
+    @if (searchError()) {
+      <p class="friend-error">{{ searchError() }}</p>
+    }
+
+    @if (visibleResults(); as results) {
+      <div class="list mt-2">
+        @for (profile of results; track profile.uid) {
+          <div class="list-card friend-result">
+            <div class="list-info">
+              <span class="friend-avatar">{{ profile.displayName.charAt(0).toUpperCase() }}</span>
+              <span class="list-name">{{ profile.displayName }}</span>
+            </div>
+            @if (relationshipWith(profile.uid); as existing) {
+              @if (existing.status === 'accepted') {
+                <span class="friend-pending">Friends</span>
+              } @else if (existing.requesterUid === profile.uid) {
+                <button class="btn btn-primary friend-btn" (click)="onAccept(existing)"
+                  [disabled]="busy() === existing.id">Accept</button>
+              } @else {
+                <div class="friend-actions">
+                  <span class="friend-pending">Requested</span>
+                  <button class="btn btn-secondary friend-btn" (click)="onCancel(existing)"
+                    [disabled]="busy() === existing.id">Cancel</button>
+                </div>
+              }
+            } @else {
+              <button class="btn btn-primary friend-btn" (click)="onAdd(profile)"
+                [disabled]="busy() === profile.uid">Add friend</button>
+            }
+          </div>
+        } @empty {
+          <p class="friend-hint mt-2">
+            @if (activeTerm()) {
+              No one found. If you're sure of their email, they may not have opened
+              the app since friends were added — their profile is created on sign-in.
+            } @else {
+              Nobody is registered yet.
+            }
+          </p>
+        }
+      </div>
+
+      <!-- Pager. Only rendered when there's actually somewhere to go. -->
+      @if (hasPrevPage() || hasNextPage()) {
+        <div class="friend-pager">
+          <button class="btn btn-secondary friend-btn" (click)="prevPage()"
+            [disabled]="!hasPrevPage() || searching()">Previous</button>
+          <span class="friend-pager-label">Page {{ pageIndex() + 1 }}</span>
+          <button class="btn btn-secondary friend-btn" (click)="nextPage()"
+            [disabled]="!hasNextPage() || searching()">Next</button>
+        </div>
+      }
+
+      <button class="btn btn-ghost friend-btn mt-2" (click)="clearSearch()">Clear</button>
+    }
+  </div>
+</section>

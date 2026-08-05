@@ -48,6 +48,7 @@ notification queue — see [Features → Toasts](./features.md#toasts).
   ├── /workouts
   ├── /weights
   ├── /analytics
+  ├── /friends
   ├── /settings
   ├── /changelog
   └── '' → redirect to /dashboard
@@ -77,9 +78,11 @@ Two different shells depending on whether the user is authenticated:
 - **`ShellComponent`** (`src/app/layout/shell/`) — wraps every guarded page.
   Renders `NavSidebarComponent`, a hamburger button to reopen the sidebar on
   mobile, a backdrop when open on mobile, and `<router-outlet />` for the
-  page body.
+  page body. Also injects `UserProfileService` purely for its side effect —
+  publishing the signed-in user's `userProfiles/{uid}` directory entry — because
+  the shell is the one component wrapping every signed-in route.
 - **`NavSidebarComponent`** (`src/app/layout/nav-sidebar/`) — the left nav:
-  links to Dashboard/Weeks/Workouts/Weight/Analytics/Settings, plus
+  links to Dashboard/Weeks/Workouts/Weight/Analytics/Friends/Settings, plus
   `ThemeToggleComponent` and a Sign Out button. `RouterLinkActive` highlights
   the current page. Note: it does **not** currently link to `/changelog` —
   that page is only reachable via the Dashboard button.
@@ -124,8 +127,9 @@ Analytics. Declared on the component, Chart.js stays in the lazy `analytics` chu
 ## The service/signal pattern (central)
 
 This is the single most important pattern in the codebase — it repeats
-almost identically in `WeekService`, `WeightService`, `WorkoutService`, and
-`SettingsService`. Understanding it once explains most of `src/app/services/`.
+almost identically in `WeekService`, `WeightService`, `WorkoutService`,
+`SettingsService` and `FriendService`. Understanding it once explains most of
+`src/app/services/`.
 
 Each domain has one `@Injectable({ providedIn: 'root' })` service that:
 

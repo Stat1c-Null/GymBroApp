@@ -1,0 +1,104 @@
+/* Friends-specific layout. Cards, buttons and list rows come from styles.css. */
+
+.friends-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+/* Same mark as the nav sidebar's avatar, one size down for a list row. */
+.friend-avatar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  color: var(--text-on-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* .btn is sized for page-level actions; a list row needs a smaller hit target. */
+.friend-btn {
+  padding: 8px 16px;
+  font-size: 0.85rem;
+}
+
+.friend-btn .spinner {
+  width: 16px;
+  height: 16px;
+}
+
+.friend-pending {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.friend-search {
+  padding: 1.25rem;
+}
+
+.friend-search-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.friend-search-form .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+}
+
+.friend-error {
+  font-size: 0.85rem;
+  color: var(--error);
+  margin-top: 0.6rem;
+}
+
+/* Results sit inside the search card, so they don't need their own glass panel. */
+.friend-result {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.friend-result:last-child {
+  border-bottom: none;
+}
+
+.friend-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.friend-pager-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .friend-search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

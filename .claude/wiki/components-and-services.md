@@ -15,6 +15,8 @@ via `inject()`, never provided per-component.
 | `WeightAnalyticsService` | derives from `WeightService` + `SettingsService` | `samples`, `daily`, `trend`, `latestLbs`, `goal`, `today` | — (read-only derivation) |
 | `ExerciseAnalyticsService` | collection-group over all `entries` (+ `WorkoutService`/`SettingsService`) | `entries` (all weeks), `loaded`, `groups` | `exercisesInGroup(group)`, `sessionsFor(ids)` — read-only |
 | `EntryBackfillService` | `users/{uid}/weeks/*/entries` | — | `backfillEntries()` — one-time uid/date migration (idempotent) |
+| `UserProfileService` | `userProfiles/{uid}` (top-level) | — (a `Map` cache, not a signal) | `listProfiles(term?, after?)` — one paged page of the directory (empty term = browse everyone), `profileFor(uid)`; an `effect()` publishes the signed-in user's entry |
+| `FriendService` | `friendships/{pairId}` (top-level) | `friendships`, `friends`, `incomingRequests`, `outgoingRequests`, `byOtherUid` | `sendRequest`, `accept`, `decline`, `cancel`, `remove` |
 | `ChartThemeService` | `ThemeService` | `palette` (computed) | — |
 | `ThemeService` | `localStorage` only | `theme` (`'light' \| 'dark'`) | `toggleTheme` |
 | `ToastService` | in-memory only | `message`, `type`, `visible` | `show(message, type?, duration?)` |
@@ -73,7 +75,7 @@ give each exercise series its own stable colour.
 
 | Component | Selector | Purpose |
 |---|---|---|
-| `ShellComponent` | `app-shell` | Route target for `''` — wraps every guarded page. Owns sidebar open/close state (`open` signal, defaults open on desktop / closed on mobile via `window.innerWidth`), renders `NavSidebarComponent` + `<router-outlet>`. |
+| `ShellComponent` | `app-shell` | Route target for `''` — wraps every guarded page. Owns sidebar open/close state (`open` signal, defaults open on desktop / closed on mobile via `window.innerWidth`), renders `NavSidebarComponent` + `<router-outlet>`. Injects `UserProfileService` for its side effect only (publishes the signed-in user's directory entry). |
 | `NavSidebarComponent` | `app-nav-sidebar` | Left nav: links to all app pages except Changelog (see [Architecture](./architecture.md#layout)), `ThemeToggleComponent`, sign-out. Auto-closes itself on navigation when on a mobile-width viewport (`onNavigate`). |
 
 ## Pages (`src/app/pages/`)
@@ -91,6 +93,7 @@ this list is just the file map:
 | Workouts | `/workouts` | `workouts.ts`, `.html`, `.css` |
 | Weights | `/weights` | `weights.ts`, `.html`, `.css` |
 | Analytics | `/analytics` | `analytics.ts`, `.html`, `.css`; `goal-form-modal.ts`; `weight-burndown/` (ts/html/css); `muscle-progress/` (ts/html/css) |
+| Friends | `/friends` | `friends.ts`, `.html`, `.css` |
 | Settings | `/settings` | `settings.ts`, `.html`, `.css` |
 | Changelog | `/changelog` | `changelog.ts`, `.html`, `.css`, `changelog-data.ts` |
 

@@ -28,8 +28,10 @@ itself will accept.
 
 ## Document layout
 
-Everything is nested under `users/{uid}/...` — there is no top-level
-collection containing cross-user data.
+Almost everything is nested under `users/{uid}/...`. The **only** exceptions are
+the two top-level collections the Friends feature needs, because friend search
+has to read other people's names — see
+[Cross-user collections](#cross-user-collections-friends).
 
 ```
 users/{uid}
@@ -37,6 +39,9 @@ users/{uid}
 ├── workouts/{workoutId}        (collection)
 ├── weights/{weightId}          (collection)
 └── weeks/{weekId}/entries/{entryId}   (sub-collection per week)
+
+userProfiles/{uid}              (top-level — the searchable directory)
+friendships/{pairId}            (top-level — the friend graph)
 ```
 
 ### `users/{uid}/settings/preferences`
@@ -173,6 +178,142 @@ persisted `settings.entriesBackfilledAt` flag. It finds entries by walking weekI
 deterministically (Monday → Monday from the account's earliest activity), which
 sidesteps the Firestore "phantom parent" problem (a `weeks/{weekId}` parent doc may
 not exist even when its `entries` sub-collection does).
+
+## Cross-user collections (Friends)
+
+The per-user tree above structurally cannot support friend search: finding
+someone means reading a document that isn't yours. So the Friends feature adds
+the app's only two top-level collections. Nothing about a user's workouts, weight
+or settings leaves `users/{uid}` — only what's needed to find and label a person.
+
+### `userProfiles/{uid}` — the searchable directory
+
+Owned by `UserProfileService`. Shape (`UserProfile` in `services/friends.ts`):
+
+```ts
+{
+  uid: string;
+  displayName: string;       // shown in search results and friend lists
+  displayNameLower: string;  // prefix-search key
+  emailLower: string;        // exact-match search key — NEVER rendered
+  createdAt: Timestamp;      // first write only
+  updatedAt: Timestamp;
+}
+```
+
+Upserted by an `effect()` on `AuthService.currentUser`, and only when a field
+would actually change — signing in shouldn't cost a write on every page load.
+`ShellComponent` injects the service purely to make that effect run.
+
+**Existing users become searchable on their next sign-in, and there is no
+back-fill.** Unlike `EntryBackfillService`, which can walk week ids
+deterministically, a client cannot enumerate Firebase Auth users — so an account
+that never signs in again simply stays unfindable. There is no client-side fix.
+
+`listProfiles(term, after)` is the single read path, with three query shapes —
+all **single-field**, so all auto-indexed with no composite index:
+
+- **empty term** → `orderBy('displayNameLower')`, paged. Browsing the whole
+  directory is the fallback when prefix search can't help (you don't know the
+  spelling), and the fastest way to answer "does this person have a profile yet?"
+- **email** (term contains `@`) → `where('emailLower', '==', term)`, unpaged —
+  there's at most one hit. **No `orderBy` on this path**: pairing an equality
+  filter with a sort on a *different* field is exactly what forces a composite
+  index.
+- **name** → `where('displayNameLower', '>=', term)` +
+  `where('displayNameLower', '<=', term + PREFIX_SENTINEL)`, paged. The range
+  filter and the sort are on the same field, so it stays single-field.
+
+`PREFIX_SENTINEL` is U+F8FF, built with `String.fromCharCode` rather than written
+as a literal — the raw character is invisible and doesn't survive every editor or
+diff intact, and a mangled sentinel would silently break every name search.
+Firestore has no full-text search: prefix matching is the whole story.
+
+**Paging** is `PROFILE_PAGE_SIZE` (20) per page, cursor-based. Two details worth
+not relearning:
+
+- The query asks for `PAGE_SIZE + 1` rows. Whether that extra row comes back is
+  how "is there a next page?" is answered — no second count query.
+- The cursor is a **document snapshot**, not the last name string. Firestore
+  appends the document id as a tiebreaker to every sort, and only a snapshot
+  carries that tiebreaker; a bare name would silently skip people who share a
+  display name with the one on a page boundary.
+
+The page component keeps a `cursors[]` array (index → that page's start cursor)
+so Previous jumps straight back instead of re-walking from page one. Note that
+the signed-in user is filtered out of results *client-side*, after the read, so a
+page can legitimately show 19 rows.
+
+### `friendships/{pairId}` — the friend graph
+
+Owned by `FriendService`. `pairId = [uidA, uidB].sort().join('_')`.
+
+```ts
+{
+  members: [string, string];   // sorted — the array-contains query key
+  requesterUid: string;        // who sent it; only the *other* member may accept
+  status: 'pending' | 'accepted';
+  createdAt: Timestamp;
+  respondedAt?: Timestamp;     // set on accept
+}
+```
+
+**One shared document per relationship, not a mirrored copy under each user.**
+Mirroring would put the same fact in two places and need a `writeBatch` to keep
+them honest on every accept and unfriend — exactly the problem
+[Denormalization & consistency](#denormalization--consistency) below describes for
+muscle groups. One doc makes that consistency structural instead of enforced.
+
+The **deterministic id** carries the rest of the design: A→B and B→A resolve to
+the same document, so duplicate requests and the both-request-each-other race are
+impossible by construction — no "does one already exist?" pre-query, no dedupe.
+Direction is derived (`requesterUid` vs. the reader), never stored twice.
+
+Decline, cancel and unfriend are all the same `deleteDoc`, which also means a
+declined pair can try again later.
+
+Reads are **one live query**: `where('members', 'array-contains', uid)` — no
+`orderBy`, no `status` filter, so it stays single-field and needs **no composite
+index**. `splitFriendships()` (`services/friends.ts`, pure and unit-tested) does
+the bucketing into friends / incoming / outgoing and the newest-first sort
+client-side.
+
+### Firebase-console setup this repo can't ship
+
+Same situation as the collection-group index above — no rules file lives here.
+🟠 These rules are a reviewed starting point, not verified code: check them in the
+Rules Playground before trusting them.
+
+```
+match /userProfiles/{uid} {
+  allow read: if request.auth != null;
+  allow write: if request.auth != null && request.auth.uid == uid;
+}
+
+match /friendships/{pairId} {
+  allow read:   if request.auth.uid in resource.data.members;
+  allow create: if request.auth.uid == request.resource.data.requesterUid
+                && request.auth.uid in request.resource.data.members
+                && request.resource.data.members.size() == 2
+                && request.resource.data.status == 'pending';
+  // Only the recipient can accept, and only pending → accepted.
+  allow update: if request.auth.uid in resource.data.members
+                && request.auth.uid != resource.data.requesterUid
+                && resource.data.status == 'pending'
+                && request.resource.data.status == 'accepted'
+                && request.resource.data.members == resource.data.members;
+  allow delete: if request.auth.uid in resource.data.members;
+}
+```
+
+Note what the `update` rule buys beyond "only the recipient accepts": because a
+`setDoc` onto an existing document counts as an update, it also refuses to
+re-open an already-accepted friendship as pending.
+
+Any signed-in user can read any profile — that is the deliberate price of search.
+It is why `emailLower` is stored lowercased for matching but never rendered, and
+why the published `displayName` falls back to the email's local part rather than
+the whole address.
 
 ## Denormalization & consistency
 

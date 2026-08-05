@@ -239,6 +239,48 @@ that's the test of the design.
 > needs a Firebase-console collection-group index + security rule — see
 > [Database → Cross-week analytics reads](./database.md#cross-week-analytics-reads-the-exception).
 
+## Friends
+
+**Files**: `pages/friends/` (`friends.ts`, `.html`, `.css`),
+`services/friend.service.ts`, `services/user-profile.service.ts`,
+`services/friends.ts` (+ `friends.spec.ts`).
+
+The app's **only cross-user feature**, and the reason two top-level Firestore
+collections exist at all — see
+[Database → Cross-user collections](./database.md#cross-user-collections-friends).
+
+What `/friends` does:
+
+- **Search** by display-name prefix or exact email, or **browse everyone** by
+  hitting Search with an empty box. A term containing `@` is matched exactly
+  against `emailLower`; anything else is a prefix match on `displayNameLower`.
+  Firestore has no full-text search, so "kita" will not find "Mikita" — a
+  limitation to state to users, not a bug to fix, and the reason browsing exists.
+- **Paged, 20 at a time**, with Previous/Next. See
+  [Database → userProfiles](./database.md#userprofilesuid--the-searchable-directory)
+  for the cursor mechanics.
+- **Emails are matchable but never rendered.** Search hits, the friend list and
+  the request rows show display names only. That's why the published name falls
+  back to the email's *local part* (`profileNameFor` in
+  `user-profile.service.ts`) rather than reusing `AuthService.displayName`, whose
+  fallback is the whole address — fine for labelling yourself, a leak when shown
+  to other people.
+- **Request → accept.** Sending creates a `pending` friendship; only the
+  recipient can accept it. Decline, cancel and unfriend are all the same
+  `deleteDoc`, so a declined pair is free to try again later.
+- **Requests surface on this page only** — no nav badge, no toast, no push. A
+  request sits under "Friend requests" until the user opens `/friends`.
+
+Accepted friends currently do nothing beyond appearing in each other's list.
+Viewing a friend's profile or their week's workouts is deliberately not built
+yet; the data model is shaped so it can be added without a migration.
+
+**Interaction with the rest of the app: none.** No existing page, service or
+collection changed. `ShellComponent` gained one injection —
+`UserProfileService`, purely for its side effect of publishing the signed-in
+user's directory entry — because the shell wraps every signed-in route, and
+nothing outside it has a user to publish.
+
 ## Changelog
 
 **Files**: `components/changelog-entry/`, `pages/changelog/` (`changelog.ts`,
