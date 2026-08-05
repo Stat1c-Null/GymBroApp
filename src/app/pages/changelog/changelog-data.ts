@@ -6,6 +6,19 @@ import type { ChangelogEntry } from '../../components/changelog-entry/changelog-
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 3,
+    date: '2026-08-05',
+    changes: [
+      'Friends are here — the new Friends page lets you find other lifters by name or email, send them a friend request, and see everyone who has accepted in one list.',
+      'Not sure how someone spelled their name? Hit Search with an empty box to browse everyone who has signed up, 20 at a time.',
+      'Friend requests wait for you on the Friends page: accept or decline what comes in, cancel a request you sent by mistake, or remove a friend at any time. For now, friends simply appear in each other\'s list — seeing their workouts comes later.',
+      'New Cardio category, available to everyone from the start and always listed first. Log a session with its duration, distance, average heart rate and elevation instead of sets and reps.',
+      'Your cardio pace is worked out for you from duration and distance, so the numbers can never disagree.',
+      'Choose whether distance and elevation show in miles/feet or kilometres/meters, in Settings next to the weight unit.',
+      'Logging a workout where every set used the same weight now updates that exercise\'s usual weight automatically, so the form starts from what you actually lifted last time.',
+    ],
+  },
+  {
     version: 2,
     date: '2026-07-21',
     changes: [
