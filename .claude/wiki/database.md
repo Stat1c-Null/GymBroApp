@@ -7,8 +7,8 @@ Firebase project `gymbroapp-7b680`. Two pieces are used:
 - **Firebase Auth** — email/password and Google popup sign-in.
 - **Cloud Firestore** — app data scoped per-user under `users/{uid}`, plus two
   top-level collections for the friend graph. The only per-user data another
-  user can read is `weeks/*/entries`, and only between accepted friends — see
-  [Reading a friend's week](#reading-a-friends-week).
+  user can read is `weeks/*/entries` and `weights`, and only between accepted
+  friends — see [Reading a friend's data](#reading-a-friends-data).
 
 Config lives in `src/environments/environment.ts` (dev) and
 `environment.prod.ts` (prod), wired up in `app.config.ts` via
@@ -281,20 +281,39 @@ index**. `splitFriendships()` (`services/friends.ts`, pure and unit-tested) does
 the bucketing into friends / incoming / outgoing and the newest-first sort
 client-side.
 
-### Reading a friend's week
+### Reading a friend's data
 
-Friends can open each other's week from the Friends page. Nothing is copied to do
-it: `WeekService.entriesFor(uid, weekId)` runs the *same* query the Weeks page
-runs, just against another uid, and the rules below decide whether it is allowed.
+Friends can open each other's **logged week** and **body-weight log** from the
+Friends page. Nothing is copied to do it: `WeekService.entriesFor(uid, weekId)`
+and `WeightService.recentFor(uid)` run the *same* queries the Weeks and Weight
+pages run, just against another uid, and the rules below decide whether it is
+allowed.
 
 That makes the security rule the only gate — which is why the client treats a
-failed read as its own state. `FriendWeekComponent` distinguishes three
-outcomes, where the Weeks page needs only two: `undefined` (loading), `[]` (an
-empty week), and `'failed'` (refused or offline). Showing a refused read as an
-empty week would quietly tell someone their friend skipped the gym.
+failed read as its own state. Both panels distinguish three outcomes, where the
+owner-facing pages need only two: `undefined` (loading), `[]` (nothing logged),
+and `'failed'` (refused or offline). Showing a refused read as an empty result
+would quietly tell someone their friend skipped the gym, or never weighs in.
 
-Only `weeks/*/entries` opens up. Weights, goals, settings and the workout library
-all stay under the owner-only rule.
+Exactly two subtrees open up, both read-only:
+
+| Path | Exposed as |
+|---|---|
+| `users/{uid}/weeks/*/entries` | `FriendWeekComponent` — the whole week, any week |
+| `users/{uid}/weights` | `FriendWeightComponent` — the last `RECENT_WEIGHTS` weigh-ins |
+
+The weight window is bounded in the *query* (`orderBy` + `limit`), which is a
+product decision, not a security boundary — the rule permits the whole
+collection, so a wider `limit` would return more. Narrow the rule if that ever
+needs to be enforced.
+
+Settings, the weight **goal**, the workout library and the analytics back-fill
+all stay owner-only. Nothing anywhere becomes writable across a friendship.
+
+**This is a privacy decision, not just a schema one.** Accepting a friend request
+now discloses body weight, with no per-field opt-out and no indication to the
+owner that someone looked. If that should be optional, the natural home is a flag
+on `userProfiles/{uid}` checked in the rule alongside `isAcceptedFriend`.
 
 ### Firebase-console setup this repo can't ship
 
@@ -324,9 +343,14 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // A friend's logged week — read-only, and only weeks/*/entries. Rules are
-    // OR-ed with the owner rule above, so this only ever adds access.
+    // A friend's logged week — read-only. Rules are OR-ed with the owner rule
+    // above, so this only ever adds access.
     match /users/{userId}/weeks/{weekId}/entries/{entryId} {
+      allow read: if request.auth != null && isAcceptedFriend(userId);
+    }
+
+    // A friend's body-weight log — read-only.
+    match /users/{userId}/weights/{entryId} {
       allow read: if request.auth != null && isAcceptedFriend(userId);
     }
 

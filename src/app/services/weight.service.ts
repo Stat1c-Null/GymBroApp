@@ -7,11 +7,12 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  limit,
   query,
   orderBy,
   serverTimestamp,
 } from '@angular/fire/firestore';
-import { of, switchMap } from 'rxjs';
+import { Observable, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 
 const LBS_PER_KG = 2.2046226218;
@@ -71,6 +72,33 @@ export interface WeightEntry {
   createdAt?: unknown; // Firestore serverTimestamp
 }
 
+/** How many weigh-ins a friend's weight panel pulls. See `WeightService.recentFor`. */
+export const RECENT_WEIGHTS = 8;
+
+/** One logged weigh-in as it should be shown in `unit`. Both units are stored,
+ *  so this picks a field rather than converting — no rounding drift. */
+export function weightIn(entry: WeightEntry, unit: WeightUnit): number {
+  return unit === 'kg' ? entry.kg : entry.lbs;
+}
+
+/**
+ * Net change across a newest-first run of weigh-ins: newest minus oldest, in
+ * `unit`. `null` when there's nothing to compare — fewer than two entries.
+ *
+ * Note this is the change over *the entries given*, not over a fixed period. The
+ * caller passes a bounded window, so the honest way to label the result is by
+ * the dates of its endpoints, never as "this month".
+ */
+export function weightChange(
+  entries: WeightEntry[],
+  unit: WeightUnit
+): number | null {
+  if (entries.length < 2) return null;
+  const newest = weightIn(entries[0], unit);
+  const oldest = weightIn(entries[entries.length - 1], unit);
+  return Math.round((newest - oldest) * 10) / 10;
+}
+
 /**
  * A body-weight target: where the user started, where they want to land, and by
  * when. Both units are stored for the same reason {@link WeightEntry} stores both —
@@ -113,6 +141,30 @@ export class WeightService {
     ),
     { initialValue: undefined }
   ) as () => WeightEntry[] | undefined;
+
+  /**
+   * The most recent {@link RECENT_WEIGHTS} weigh-ins of *any* user, newest first
+   * — how the Friends page shows a friend's body weight.
+   *
+   * Windowed rather than unbounded because nobody needs a friend's whole history
+   * to answer "what do they weigh now?", and because a years-long log is a
+   * pointless download. The window is still enough to show which way they're
+   * heading. `orderBy` + `limit` on one field needs no composite index.
+   *
+   * Taking a uid is not an authorization decision — Firestore rules are. The
+   * stream errors unless the two are accepted friends; callers reading someone
+   * else must handle that (see `.claude/wiki/database.md`).
+   */
+  recentFor(uid: string): Observable<WeightEntry[]> {
+    return collectionData(
+      query(
+        this.userWeights(uid),
+        orderBy('createdAt', 'desc'),
+        limit(RECENT_WEIGHTS)
+      ),
+      { idField: 'id', serverTimestamps: 'estimate' }
+    ) as Observable<WeightEntry[]>;
+  }
 
   async add(data: Omit<WeightEntry, 'id' | 'createdAt'>): Promise<void> {
     const uid = this.auth.requireUid('log your weight');

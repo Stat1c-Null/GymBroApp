@@ -1,0 +1,54 @@
+<div class="friend-weight glass-card">
+  <div class="friend-weight-head">
+    <span class="friend-weight-name">{{ name() }}</span>
+    <span class="friend-weight-sub">Body weight</span>
+  </div>
+
+  @if (failed()) {
+    <p class="friend-weight-error">
+      Couldn't load this. You can only see the weight of people you're friends
+      with — if you've only just accepted each other, give it a moment and try again.
+    </p>
+  } @else if (entries(); as list) {
+    @if (latest(); as newest) {
+      <div class="friend-weight-current">
+        <span class="friend-weight-value">{{ shown(newest) }}</span>
+        <span class="friend-weight-unit">{{ unit() }}</span>
+        @if (dateOf(newest); as d) {
+          <span class="friend-weight-when">{{ d | date: 'MMM d, y' }}</span>
+        } @else {
+          <span class="friend-weight-when">Just now</span>
+        }
+      </div>
+
+      @if (changeLabel(); as label) {
+        <p class="friend-weight-change">
+          {{ label }}
+          @if (since(); as start) {
+            <span class="friend-weight-since">since {{ start | date: 'MMM d' }}</span>
+          }
+        </p>
+      }
+
+      <!-- The window behind the number above, so it isn't a single unexplained figure. -->
+      <div class="friend-weight-history">
+        @for (entry of list; track entry.id) {
+          <div class="friend-weight-row">
+            <span class="friend-weight-row-value">{{ shown(entry) }} {{ unit() }}</span>
+            @if (dateOf(entry); as d) {
+              <span class="friend-weight-row-date">{{ d | date: 'MMM d, y' }}</span>
+            } @else {
+              <span class="friend-weight-row-date">Just now</span>
+            }
+          </div>
+        }
+      </div>
+    } @else {
+      <p class="friend-weight-empty">{{ name() }} hasn't logged a weigh-in yet.</p>
+    }
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
+</div>

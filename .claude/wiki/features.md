@@ -279,36 +279,49 @@ What `/friends` does:
 - **Requests surface on this page only** — no nav badge, no toast, no push. A
   request sits under "Friend requests" until the user opens `/friends`.
 
-### Seeing a friend's week
+### Seeing a friend's week and weight
 
-**Files**: `pages/friends/friend-week/`, plus the shared `components/week-grid/`
-and `components/week-nav/`.
+**Files**: `pages/friends/friend-week/`, `pages/friends/friend-weight/`, plus the
+shared `components/week-grid/` and `components/week-nav/`.
 
-The calendar button on a friend's row expands their week **in place** — no route
-change, no page. It is the Weeks page's own grid in read-only, compact form, so
+Each friend's row carries two buttons — a calendar and a scale — that expand a
+read-only panel **in place**, below that row. No route change, no page.
+
+The **week** panel is the Weeks page's own grid in read-only, compact form, so
 the two views cannot drift apart: `WeekGridComponent` is the same component,
 `WeekNavComponent` is the same nav, and the entries come from the same query via
 `WeekService.entriesFor(uid, weekId)`.
 
-Three things about the panel are deliberate:
+The **weight** panel shows their latest weigh-in, the net change across the
+loaded window, and that window as a short list. It reads
+`WeightService.recentFor(uid)`, which is bounded to the last `RECENT_WEIGHTS`
+entries — nobody needs a friend's whole history to answer "what do they weigh?",
+and an unbounded log is a pointless download.
 
-- **One at a time.** Opening a friend's week closes anyone else's. Each panel is
-  a live Firestore subscription; a list of them would keep several running while
-  the user reads one.
-- **Its own week cursor.** `FriendWeekComponent` holds a private `mondayOf`
-  signal rather than driving `WeekService.currentWeekStart`. Paging back through
-  a friend's month must not move the week on the user's own Weeks page. Only the
-  shared `today` clock is borrowed, so the "today" highlight still rolls over at
-  midnight.
-- **A refused read is not an empty week.** See
-  [Database → Reading a friend's week](./database.md#reading-a-friends-week).
+Four things about the panels are deliberate:
 
-Units follow the **viewer**, not the logger: entries store canonical pounds and
-miles, and `entrySummary` (`services/entry-summary.ts`, pure and unit-tested)
-renders them in whatever the reader picked in Settings.
+- **One at a time, across the whole list.** The two buttons on a row behave like
+  tabs, and opening either closes whatever else was open. Each panel is a live
+  Firestore subscription; a list of them would keep several running while the
+  user reads one.
+- **The week panel keeps its own cursor.** `FriendWeekComponent` holds a private
+  `mondayOf` signal rather than driving `WeekService.currentWeekStart`. Paging
+  back through a friend's month must not move the week on the user's own Weeks
+  page. Only the shared `today` clock is borrowed, so the "today" highlight still
+  rolls over at midnight.
+- **A refused read is not an empty result.** See
+  [Database → Reading a friend's data](./database.md#reading-a-friends-data).
+- **The weight change is not colour-coded.** Neither direction is "good" without
+  knowing the person's goal, and green/red would have the app cheering or
+  scolding someone's body weight. The ± sign carries the direction.
 
-Still not built: a friend's profile, their weights, their analytics. Only
-`weeks/*/entries` is readable across the friendship, and only for reading.
+Units follow the **viewer**, not the logger. Week entries store canonical pounds
+and miles, and `entrySummary` (`services/entry-summary.ts`, pure and unit-tested)
+renders them in whatever the reader picked in Settings. `WeightEntry` stores both
+kg and lbs, so `weightIn` picks a field rather than converting — no rounding
+drift.
+
+Still not built: a friend's profile, their weight **goal**, their analytics.
 
 **Interaction with the rest of the app**: the Weeks page now composes
 `WeekGridComponent` + `WeekNavComponent` instead of owning its grid markup, and

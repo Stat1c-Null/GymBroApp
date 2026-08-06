@@ -1,0 +1,120 @@
+/* The body-weight panel that drops open under a friend's row. Sibling of
+   friend-week/ — same frame, different contents. */
+
+.friend-weight {
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.friend-weight-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.friend-weight-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.friend-weight-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* The headline number. */
+.friend-weight-current {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.friend-weight-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.friend-weight-unit {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.friend-weight-when {
+  margin-left: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Deliberately not colour-coded up/down. Neither direction is "good" without
+   knowing the person's goal, and green/red here would have the app cheering or
+   scolding someone's body weight. The ± sign carries the direction on its own. */
+.friend-weight-change {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.friend-weight-since {
+  margin-left: 0.35rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.friend-weight-history {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.friend-weight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  font-size: 0.82rem;
+}
+
+.friend-weight-row + .friend-weight-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.friend-weight-row-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.friend-weight-row-date {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.friend-weight-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.friend-weight-error {
+  font-size: 0.85rem;
+  color: var(--error);
+}
+
+@media (max-width: 768px) {
+  .friend-weight {
+    padding: 0.85rem;
+  }
+
+  .friend-weight-value {
+    font-size: 1.65rem;
+  }
+}

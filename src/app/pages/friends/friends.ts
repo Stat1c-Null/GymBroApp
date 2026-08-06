@@ -10,11 +10,15 @@ import {
 import { Friendship, UserProfile, otherMember } from '../../services/friends';
 import { ToastService } from '../../services/toast.service';
 import { FriendWeekComponent } from './friend-week/friend-week';
+import { FriendWeightComponent } from './friend-weight/friend-weight';
+
+/** Which read-only panel a friend's row can expand. */
+type FriendPanel = 'week' | 'weight';
 
 @Component({
   selector: 'app-friends',
   standalone: true,
-  imports: [FormsModule, FriendWeekComponent],
+  imports: [FormsModule, FriendWeekComponent, FriendWeightComponent],
   templateUrl: './friends.html',
   styleUrl: './friends.css',
 })
@@ -59,12 +63,16 @@ export class FriendsComponent {
   protected readonly busy = signal<string | null>(null);
 
   /**
-   * The friend whose week is expanded below their row, or null.
+   * Which friend has a panel expanded below their row, and which one — or null.
    *
-   * One at a time on purpose: each open panel is a live Firestore subscription,
-   * and a list of them would keep several running while the user reads one.
+   * A single value, so at most one panel is open across the whole list. Each is
+   * a live Firestore subscription; a list of them would keep several running
+   * while the user reads one. The two buttons on a row therefore behave like
+   * tabs: opening one closes the other.
    */
-  protected readonly expandedUid = signal<string | null>(null);
+  protected readonly expanded = signal<{ uid: string; panel: FriendPanel } | null>(
+    null
+  );
 
   /** uid → display name, filled in as friendships arrive. */
   private readonly names = signal(new Map<string, string>());
@@ -106,10 +114,17 @@ export class FriendsComponent {
     return this.relationships().get(uid);
   }
 
-  /** Open this friend's week below their row, or close it if it's already open.
-   *  Opening one closes any other — see {@link expandedUid}. */
-  protected toggleWeek(uid: string): void {
-    this.expandedUid.update((current) => (current === uid ? null : uid));
+  protected isOpen(uid: string, panel: FriendPanel): boolean {
+    const current = this.expanded();
+    return current?.uid === uid && current.panel === panel;
+  }
+
+  /** Open a panel below this friend's row, or close it if it's already the open
+   *  one. Anything else that was open closes — see {@link expanded}. */
+  protected togglePanel(uid: string, panel: FriendPanel): void {
+    this.expanded.update((current) =>
+      current?.uid === uid && current.panel === panel ? null : { uid, panel }
+    );
   }
 
   /**
@@ -188,8 +203,8 @@ export class FriendsComponent {
     const name = this.nameFor(this.counterpartOf(friendship));
     if (!confirm(`Remove ${name} from your friends?`)) return;
 
-    // Collapse their week too, so re-adding them later doesn't reopen it.
-    this.expandedUid.set(null);
+    // Collapse their panel too, so re-adding them later doesn't reopen it.
+    this.expanded.set(null);
     void this.run(friendship.id, 'Friend removed', () =>
       this.friendService.remove(friendship.id as string)
     );

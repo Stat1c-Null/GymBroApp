@@ -59,15 +59,26 @@
               <span class="list-name">{{ nameFor(counterpartOf(friend)) }}</span>
             </div>
             <div class="list-actions">
-              <!-- Opens their week in place, below this row — no page change. -->
-              <button class="list-action" [class.is-open]="expandedUid() === counterpartOf(friend)"
-                (click)="toggleWeek(counterpartOf(friend))"
-                [attr.aria-expanded]="expandedUid() === counterpartOf(friend)"
+              <!-- Both panels open in place, below this row — no page change. -->
+              <button class="list-action" [class.is-open]="isOpen(counterpartOf(friend), 'week')"
+                (click)="togglePanel(counterpartOf(friend), 'week')"
+                [attr.aria-expanded]="isOpen(counterpartOf(friend), 'week')"
                 [attr.aria-label]="'Show ' + nameFor(counterpartOf(friend)) + '’s week'">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" />
                   <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+              </button>
+              <button class="list-action" [class.is-open]="isOpen(counterpartOf(friend), 'weight')"
+                (click)="togglePanel(counterpartOf(friend), 'weight')"
+                [attr.aria-expanded]="isOpen(counterpartOf(friend), 'weight')"
+                [attr.aria-label]="'Show ' + nameFor(counterpartOf(friend)) + '’s body weight'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 12 8.5 8.5" />
+                  <path d="M12 3v2" />
                 </svg>
               </button>
               <button class="list-action list-delete" (click)="onRemove(friend)"
@@ -82,8 +93,11 @@
             </div>
           </div>
 
-          @if (expandedUid() === counterpartOf(friend)) {
+          @if (isOpen(counterpartOf(friend), 'week')) {
             <app-friend-week [uid]="counterpartOf(friend)" [name]="nameFor(counterpartOf(friend))" />
+          }
+          @if (isOpen(counterpartOf(friend), 'weight')) {
+            <app-friend-weight [uid]="counterpartOf(friend)" [name]="nameFor(counterpartOf(friend))" />
           }
         </div>
       } @empty {

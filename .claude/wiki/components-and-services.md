@@ -11,7 +11,7 @@ via `inject()`, never provided per-component.
 | `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups`, `unit`, `distanceUnit`, `weightGoal`, `entriesBackfilledAt` (all computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `setUnit`, `setDistanceUnit`, `setWeightGoal`, `clearWeightGoal`, `renameGroup`, `deleteGroup`, `markEntriesBackfilled` |
 | `WorkoutService` | `users/{uid}/workouts` | `workouts` (`undefined` while loading) | `add`, `update`, `remove`, `stageGroupReassign(batch, from, to)` |
 | `WeekService` | `users/{uid}/weeks/{weekId}/entries` | `entries`, `currentWeekStart`, `weekId`, `rangeLabel`, `isCurrentWeek`, `today` | `add`, `update`, `remove`, `previousWeek`, `nextWeek`, `goToThisWeek`, `entriesFor(uid, weekId)` — the same live query against *any* uid, used by the Friends page to show a friend's week (rules decide; the stream errors if they aren't friends) |
-| `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove` |
+| `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove`, `recentFor(uid)` — the last `RECENT_WEIGHTS` weigh-ins of any user, for the Friends page's weight panel (rules decide; the stream errors if they aren't friends) |
 | `WeightAnalyticsService` | derives from `WeightService` + `SettingsService` | `samples`, `daily`, `trend`, `latestLbs`, `goal`, `today` | — (read-only derivation) |
 | `ExerciseAnalyticsService` | collection-group over all `entries` (+ `WorkoutService`/`SettingsService`) | `entries` (all weeks), `loaded`, `groups` | `exercisesInGroup(group)`, `sessionsFor(ids)` — read-only |
 | `EntryBackfillService` | `users/{uid}/weeks/*/entries` | — | `backfillEntries()` — one-time uid/date migration (idempotent) |
@@ -95,7 +95,7 @@ this list is just the file map:
 | Workouts | `/workouts` | `workouts.ts`, `.html`, `.css` |
 | Weights | `/weights` | `weights.ts`, `.html`, `.css` |
 | Analytics | `/analytics` | `analytics.ts`, `.html`, `.css`; `goal-form-modal.ts`; `weight-burndown/` (ts/html/css); `muscle-progress/` (ts/html/css) |
-| Friends | `/friends` | `friends.ts`, `.html`, `.css`; `friend-week/` (ts/html/css) — the read-only week panel that expands under a friend's row |
+| Friends | `/friends` | `friends.ts`, `.html`, `.css`; `friend-week/` and `friend-weight/` (each ts/html/css) — the read-only panels that expand under a friend's row |
 | Settings | `/settings` | `settings.ts`, `.html`, `.css` |
 | Changelog | `/changelog` | `changelog.ts`, `.html`, `.css`, `changelog-data.ts` |
 
