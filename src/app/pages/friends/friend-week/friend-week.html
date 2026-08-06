@@ -1,0 +1,20 @@
+<div class="friend-week glass-card">
+  <div class="friend-week-head">
+    <div class="friend-week-title">
+      <span class="friend-week-name">{{ name() }}</span>
+      <span class="friend-week-range">{{ rangeLabel() }}</span>
+    </div>
+    <app-week-nav class="compact" [isCurrentWeek]="isCurrentWeek()" (previous)="previousWeek()"
+      (next)="nextWeek()" (thisWeek)="goToThisWeek()" />
+  </div>
+
+  @if (failed()) {
+    <p class="friend-week-error">
+      Couldn't load this week. You can only see the weeks of people you're friends
+      with — if you've only just accepted each other, give it a moment and try again.
+    </p>
+  } @else {
+    <app-week-grid [entries]="entries()" [weekStart]="weekStart()" [today]="today()" [compact]="true" />
+    <p class="friend-week-hint">Swipe the week sideways to see every day.</p>
+  }
+</div>

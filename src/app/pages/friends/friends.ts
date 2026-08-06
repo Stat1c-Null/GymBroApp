@@ -9,11 +9,12 @@ import {
 } from '../../services/user-profile.service';
 import { Friendship, UserProfile, otherMember } from '../../services/friends';
 import { ToastService } from '../../services/toast.service';
+import { FriendWeekComponent } from './friend-week/friend-week';
 
 @Component({
   selector: 'app-friends',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, FriendWeekComponent],
   templateUrl: './friends.html',
   styleUrl: './friends.css',
 })
@@ -57,6 +58,14 @@ export class FriendsComponent {
   /** Id of the row with an action in flight, so only that row's buttons disable. */
   protected readonly busy = signal<string | null>(null);
 
+  /**
+   * The friend whose week is expanded below their row, or null.
+   *
+   * One at a time on purpose: each open panel is a live Firestore subscription,
+   * and a list of them would keep several running while the user reads one.
+   */
+  protected readonly expandedUid = signal<string | null>(null);
+
   /** uid → display name, filled in as friendships arrive. */
   private readonly names = signal(new Map<string, string>());
 
@@ -95,6 +104,12 @@ export class FriendsComponent {
   /** The existing relationship with a listed person, if any — drives their button. */
   protected relationshipWith(uid: string): Friendship | undefined {
     return this.relationships().get(uid);
+  }
+
+  /** Open this friend's week below their row, or close it if it's already open.
+   *  Opening one closes any other — see {@link expandedUid}. */
+  protected toggleWeek(uid: string): void {
+    this.expandedUid.update((current) => (current === uid ? null : uid));
   }
 
   /**
@@ -173,6 +188,8 @@ export class FriendsComponent {
     const name = this.nameFor(this.counterpartOf(friendship));
     if (!confirm(`Remove ${name} from your friends?`)) return;
 
+    // Collapse their week too, so re-adding them later doesn't reopen it.
+    this.expandedUid.set(null);
     void this.run(friendship.id, 'Friend removed', () =>
       this.friendService.remove(friendship.id as string)
     );

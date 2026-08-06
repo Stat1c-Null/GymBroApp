@@ -52,22 +52,39 @@
   @if (friends(); as list) {
     <div class="list">
       @for (friend of list; track friend.id) {
-        <div class="list-card glass-card">
-          <div class="list-info">
-            <span class="friend-avatar">{{ initialFor(counterpartOf(friend)) }}</span>
-            <span class="list-name">{{ nameFor(counterpartOf(friend)) }}</span>
+        <div class="friend-entry">
+          <div class="list-card glass-card">
+            <div class="list-info">
+              <span class="friend-avatar">{{ initialFor(counterpartOf(friend)) }}</span>
+              <span class="list-name">{{ nameFor(counterpartOf(friend)) }}</span>
+            </div>
+            <div class="list-actions">
+              <!-- Opens their week in place, below this row — no page change. -->
+              <button class="list-action" [class.is-open]="expandedUid() === counterpartOf(friend)"
+                (click)="toggleWeek(counterpartOf(friend))"
+                [attr.aria-expanded]="expandedUid() === counterpartOf(friend)"
+                [attr.aria-label]="'Show ' + nameFor(counterpartOf(friend)) + '’s week'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+              </button>
+              <button class="list-action list-delete" (click)="onRemove(friend)"
+                [disabled]="busy() === friend.id" [attr.aria-label]="'Remove ' + nameFor(counterpartOf(friend))">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M17 11h6" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div class="list-actions">
-            <button class="list-action list-delete" (click)="onRemove(friend)"
-              [disabled]="busy() === friend.id" [attr.aria-label]="'Remove ' + nameFor(counterpartOf(friend))">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M17 11h6" />
-              </svg>
-            </button>
-          </div>
+
+          @if (expandedUid() === counterpartOf(friend)) {
+            <app-friend-week [uid]="counterpartOf(friend)" [name]="nameFor(counterpartOf(friend))" />
+          }
         </div>
       } @empty {
         <div class="list-empty glass-card">

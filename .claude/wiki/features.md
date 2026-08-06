@@ -43,13 +43,21 @@ navigation plus `AuthService.displayName()` for the greeting.
 
 ## Weeks (weekly workout logging)
 
-**Files**: `services/week.service.ts`, `pages/weeks/`.
+**Files**: `services/week.service.ts`, `pages/weeks/`,
+`components/week-grid/`, `components/week-nav/`, `services/entry-summary.ts`.
 
 The core logging flow. A 7-day grid (Mon–Sun, `DAY_LABELS`) for the
 currently-viewed week, with Prev/Next/"This week" navigation
 (`WeekService.previousWeek/nextWeek/goToThisWeek`, backed by
 `currentWeekStart`). Each day column lists that day's `WeekEntry` items and
 has an "add" button opening a modal to log a new one.
+
+The grid and the nav are **shared components**, not page markup: the Friends
+page renders a friend's week from the same two, read-only and compact. So the
+page component owns the modal and the writes; `WeekGridComponent` owns the
+columns and emits intent, and the one-line per-entry summary is a pure function
+in `services/entry-summary.ts`. See
+[Friends → Seeing a friend's week](#seeing-a-friends-week).
 
 **The add/edit modal cross-cuts into two other features**:
 - The muscle-group dropdown reads `SettingsService.muscleGroups()`.
@@ -271,12 +279,41 @@ What `/friends` does:
 - **Requests surface on this page only** — no nav badge, no toast, no push. A
   request sits under "Friend requests" until the user opens `/friends`.
 
-Accepted friends currently do nothing beyond appearing in each other's list.
-Viewing a friend's profile or their week's workouts is deliberately not built
-yet; the data model is shaped so it can be added without a migration.
+### Seeing a friend's week
 
-**Interaction with the rest of the app: none.** No existing page, service or
-collection changed. `ShellComponent` gained one injection —
+**Files**: `pages/friends/friend-week/`, plus the shared `components/week-grid/`
+and `components/week-nav/`.
+
+The calendar button on a friend's row expands their week **in place** — no route
+change, no page. It is the Weeks page's own grid in read-only, compact form, so
+the two views cannot drift apart: `WeekGridComponent` is the same component,
+`WeekNavComponent` is the same nav, and the entries come from the same query via
+`WeekService.entriesFor(uid, weekId)`.
+
+Three things about the panel are deliberate:
+
+- **One at a time.** Opening a friend's week closes anyone else's. Each panel is
+  a live Firestore subscription; a list of them would keep several running while
+  the user reads one.
+- **Its own week cursor.** `FriendWeekComponent` holds a private `mondayOf`
+  signal rather than driving `WeekService.currentWeekStart`. Paging back through
+  a friend's month must not move the week on the user's own Weeks page. Only the
+  shared `today` clock is borrowed, so the "today" highlight still rolls over at
+  midnight.
+- **A refused read is not an empty week.** See
+  [Database → Reading a friend's week](./database.md#reading-a-friends-week).
+
+Units follow the **viewer**, not the logger: entries store canonical pounds and
+miles, and `entrySummary` (`services/entry-summary.ts`, pure and unit-tested)
+renders them in whatever the reader picked in Settings.
+
+Still not built: a friend's profile, their weights, their analytics. Only
+`weeks/*/entries` is readable across the friendship, and only for reading.
+
+**Interaction with the rest of the app**: the Weeks page now composes
+`WeekGridComponent` + `WeekNavComponent` instead of owning its grid markup, and
+its per-entry summary moved to `services/entry-summary.ts`. No data shape,
+collection or route changed. `ShellComponent` gained one injection —
 `UserProfileService`, purely for its side effect of publishing the signed-in
 user's directory entry — because the shell wraps every signed-in route, and
 nothing outside it has a user to publish.

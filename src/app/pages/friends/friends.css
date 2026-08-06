@@ -28,6 +28,20 @@
   gap: 0.5rem;
 }
 
+/* A friend's row plus the week panel that drops open under it, so the two stay
+   together as one item of the list. */
+.friend-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Keep the "show week" button lit while its panel is open. */
+.friend-entry .list-action.is-open {
+  background: var(--primary-glow);
+  color: var(--primary-light);
+}
+
 /* .btn is sized for page-level actions; a list row needs a smaller hit target. */
 .friend-btn {
   padding: 8px 16px;

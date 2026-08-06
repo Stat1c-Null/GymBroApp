@@ -1,5 +1,4 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
@@ -20,12 +19,14 @@ import {
 } from '../../services/cardio';
 import { ModalComponent } from '../../components/modal/modal';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
+import { WeekGridComponent } from '../../components/week-grid/week-grid';
+import { WeekNavComponent } from '../../components/week-nav/week-nav';
 import {
   WeekService,
   WeekEntry,
   CardioLog,
   DAY_LABELS,
-  toWeekId,
+  bucketByDay,
   parseTime,
   formatTime,
   uniformWeight,
@@ -53,7 +54,13 @@ interface SetRow {
 @Component({
   selector: 'app-weeks',
   standalone: true,
-  imports: [FormsModule, DatePipe, ModalComponent, WorkoutFormModalComponent],
+  imports: [
+    FormsModule,
+    ModalComponent,
+    WorkoutFormModalComponent,
+    WeekGridComponent,
+    WeekNavComponent,
+  ],
   templateUrl: './weeks.html',
   styleUrl: './weeks.css',
 })
@@ -84,31 +91,19 @@ export class WeeksComponent {
 
   protected readonly unit = this.settings.unit;
 
-  // --- Week state (delegated to the service) ---
+  // --- Week state (delegated to the service; the grid itself is shared) ---
   protected readonly entries = this.service.entries;
   protected readonly rangeLabel = this.service.rangeLabel;
   protected readonly isCurrentWeek = this.service.isCurrentWeek;
+  protected readonly weekStart = this.service.currentWeekStart;
+  protected readonly today = this.service.today;
   protected readonly previousWeek = (): void => this.service.previousWeek();
   protected readonly nextWeek = (): void => this.service.nextWeek();
   protected readonly goToThisWeek = (): void => this.service.goToThisWeek();
 
-  /** The 7 day columns for the current week. */
-  protected readonly days = computed(() => {
-    const start = this.service.currentWeekStart();
-    const todayId = toWeekId(this.service.today());
-    return DAY_LABELS.map((label, i) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + i);
-      return { index: i, label, date, isToday: toWeekId(date) === todayId };
-    });
-  });
-
-  /** Entries bucketed by day index (each bucket stays newest-first). */
-  protected readonly entriesByDay = computed(() => {
-    const buckets: WeekEntry[][] = [[], [], [], [], [], [], []];
-    for (const e of this.entries() ?? []) buckets[e.day]?.push(e);
-    return buckets;
-  });
+  /** Entries bucketed by day index — only for the "already logged today?"
+   *  check below; the grid does its own bucketing from the same helper. */
+  private readonly entriesByDay = computed(() => bucketByDay(this.entries()));
 
   // --- Modal + form state ---
   protected readonly showModal = signal(false);
@@ -389,38 +384,6 @@ export class WeeksComponent {
     } catch {
       this.toast.show('Could not delete workout. Please try again.', 'error');
     }
-  }
-
-  /** Compact summary shown under a day-entry's name — dispatches on whether
-   *  the entry is a cardio session or a strength log. */
-  protected entrySummary(entry: WeekEntry): string {
-    return entry.muscleGroup === CARDIO_GROUP && entry.cardio
-      ? this.cardioSummary(entry.cardio)
-      : this.setSummary(entry);
-  }
-
-  /** e.g. "30:00 · 5 mi · 6:00 /mi". Parts with no value are omitted. */
-  private cardioSummary(cardio: CardioLog): string {
-    const unit = this.distanceUnit();
-    const distance = displayDistance(cardio.distance, unit);
-    const parts = [
-      cardio.time != null ? formatTime(cardio.time) : null,
-      distance != null ? `${distance} ${unit}` : null,
-      formatPace(cardio.time, cardio.distance, unit),
-    ];
-    return parts.filter((p): p is string => p != null).join(' · ');
-  }
-
-  /** Compact per-set summary, e.g. "12×60 · 10×60 (1:30) · 8×65 lbs".
-   *  Times are shown whenever a set has one stored — independent of the toggle. */
-  private setSummary(entry: WeekEntry): string {
-    const parts = entry.sets.map((s) => {
-      const weight = displayLifted(s.weight, this.settings.unit());
-      const base = weight != null ? `${s.reps}×${weight}` : `${s.reps}`;
-      return s.time != null ? `${base} (${formatTime(s.time)})` : base;
-    });
-    const hasWeight = entry.sets.some((s) => s.weight != null);
-    return parts.join(' · ') + (hasWeight ? ` ${this.settings.unit()}` : '');
   }
 
   /** A set row seeded from a stored (canonical lbs) weight. See {@link SetRow}. */

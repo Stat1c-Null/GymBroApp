@@ -1,0 +1,55 @@
+@if (entries(); as list) {
+  <div class="week-grid">
+    @for (d of days(); track d.index) {
+      <div class="day-column glass-card" [class.is-today]="d.isToday">
+        <div class="day-header">
+          <div class="day-label">
+            <span class="day-name">{{ d.label }}</span>
+            <span class="day-date">{{ d.date | date: 'MMM d' }}</span>
+          </div>
+          @if (editable()) {
+            <button class="day-add list-action" (click)="add.emit(d.index)" aria-label="Add workout">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          }
+        </div>
+
+        <div class="day-entries">
+          @for (e of entriesByDay()[d.index]; track e.id) {
+            <div class="day-entry">
+              <div class="day-entry-head">
+                <span class="day-entry-name">{{ e.workoutName }}</span>
+                @if (editable()) {
+                  <div class="list-actions">
+                    <button class="list-action" (click)="edit.emit(e)" aria-label="Edit workout">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button class="list-action list-delete" (click)="remove.emit(e)" aria-label="Delete workout">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
+                }
+              </div>
+              <span class="day-entry-sets">{{ summaryOf(e) }}</span>
+            </div>
+          } @empty {
+            <p class="day-empty">No workouts</p>
+          }
+        </div>
+      </div>
+    }
+  </div>
+} @else {
+  <div class="list-loading">
+    <span class="spinner"></span>
+  </div>
+}

@@ -10,7 +10,7 @@ via `inject()`, never provided per-component.
 | `AuthService` | Firebase Auth | `currentUser`, `displayName` (computed) | `signUp`, `signIn`, `signInWithGoogle`, `resetPassword`, `logout`, `requireUid(action?)` |
 | `SettingsService` | `users/{uid}/settings/preferences` | `showSetTime`, `muscleGroups`, `unit`, `distanceUnit`, `weightGoal`, `entriesBackfilledAt` (all computed, defaulted) | `setShowSetTime`, `setMuscleGroups`, `setUnit`, `setDistanceUnit`, `setWeightGoal`, `clearWeightGoal`, `renameGroup`, `deleteGroup`, `markEntriesBackfilled` |
 | `WorkoutService` | `users/{uid}/workouts` | `workouts` (`undefined` while loading) | `add`, `update`, `remove`, `stageGroupReassign(batch, from, to)` |
-| `WeekService` | `users/{uid}/weeks/{weekId}/entries` | `entries`, `currentWeekStart`, `weekId`, `rangeLabel`, `isCurrentWeek`, `today` | `add`, `update`, `remove`, `previousWeek`, `nextWeek`, `goToThisWeek` |
+| `WeekService` | `users/{uid}/weeks/{weekId}/entries` | `entries`, `currentWeekStart`, `weekId`, `rangeLabel`, `isCurrentWeek`, `today` | `add`, `update`, `remove`, `previousWeek`, `nextWeek`, `goToThisWeek`, `entriesFor(uid, weekId)` — the same live query against *any* uid, used by the Friends page to show a friend's week (rules decide; the stream errors if they aren't friends) |
 | `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove` |
 | `WeightAnalyticsService` | derives from `WeightService` + `SettingsService` | `samples`, `daily`, `trend`, `latestLbs`, `goal`, `today` | — (read-only derivation) |
 | `ExerciseAnalyticsService` | collection-group over all `entries` (+ `WorkoutService`/`SettingsService`) | `entries` (all weeks), `loaded`, `groups` | `exercisesInGroup(group)`, `sessionsFor(ids)` — read-only |
@@ -48,6 +48,8 @@ Reusable, non-page pieces. All standalone.
 | `WorkoutFormModalComponent` | `app-workout-form-modal` | `open`, `editingWorkout`, `presetGroup` | `close`, `saved` | Owns the entire create/edit-workout form + validation + save call. Shared by the Workouts page and the Weeks page's inline "create new workout" flow — see [Features → Workouts](./features.md#workouts-exercise-library). Re-seeds its fields from `editingWorkout`/`presetGroup` only on the closed→open transition (tracked via a local `prevOpen` flag in an `effect()`), so it doesn't clobber in-progress typing while already open. |
 | `ChangelogEntryComponent` | `app-changelog-entry` | `version`, `date`, `changes` (all `input.required`) | — | Bordered card for one changelog release. See [Features → Changelog](./features.md#changelog). |
 | `LiftedWeightPipe` | `lifted` (pipe) | — | — | `{{ set.weight \| lifted: unit() }}` → `"135 lbs"` / `"61.2 kg"`. Takes the unit as an argument rather than injecting it, so the pipe stays pure. See [Database → Weight unit handling](./database.md#weight-unit-handling). |
+| `WeekGridComponent` | `app-week-grid` | `entries`, `weekStart` (required), `today`, `editable`, `compact` | `add(day)`, `edit(entry)`, `remove(entry)` | The 7-day grid, shared by the Weeks page and the friend-week panel. Purely presentational — takes entries, emits intent, subscribes to nothing, which is what lets it render *someone else's* week. `editable` off drops the add/edit/delete affordances entirely rather than disabling them; `compact` swaps the full-height page grid for a fixed-height side-scrolling strip that does **not** stack on mobile. The one service it injects is `SettingsService`, for units — always the *viewer's*. |
+| `WeekNavComponent` | `app-week-nav` | `isCurrentWeek` | `previous`, `next`, `thisWeek` | Prev / This week / Next. Stateless by design: the Weeks page wires it to `WeekService`, the friend-week panel to its own private week signal. Add `class="compact"` for the smaller embedded size. Styles live in the component, not `styles.css`. |
 
 ### Charts (`src/app/components/charts/`)
 
@@ -93,7 +95,7 @@ this list is just the file map:
 | Workouts | `/workouts` | `workouts.ts`, `.html`, `.css` |
 | Weights | `/weights` | `weights.ts`, `.html`, `.css` |
 | Analytics | `/analytics` | `analytics.ts`, `.html`, `.css`; `goal-form-modal.ts`; `weight-burndown/` (ts/html/css); `muscle-progress/` (ts/html/css) |
-| Friends | `/friends` | `friends.ts`, `.html`, `.css` |
+| Friends | `/friends` | `friends.ts`, `.html`, `.css`; `friend-week/` (ts/html/css) — the read-only week panel that expands under a friend's row |
 | Settings | `/settings` | `settings.ts`, `.html`, `.css` |
 | Changelog | `/changelog` | `changelog.ts`, `.html`, `.css`, `changelog-data.ts` |
 

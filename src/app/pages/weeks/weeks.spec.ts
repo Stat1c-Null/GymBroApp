@@ -45,7 +45,6 @@ interface WeeksView {
   cardioHeartRate: WritableSignal<number | null>;
   cardioElevation: WritableSignal<number | null>;
   cardioPace: () => string | null;
-  entrySummary: (entry: WeekEntry) => string;
 }
 
 const SAMPLE_WORKOUT = {
@@ -671,35 +670,5 @@ describe('WeeksComponent', () => {
       });
     });
 
-    it('summarizes a cardio entry with duration, distance, and pace', () => {
-      const entry: WeekEntry = {
-        id: 'cardio-entry',
-        day: 2,
-        workoutId: 'w3',
-        workoutName: 'Morning Run',
-        muscleGroup: CARDIO_GROUP,
-        sets: [],
-        cardio: { time: 1800, distance: 5, heartRate: null, elevation: null },
-      };
-
-      const summary = view.entrySummary(entry);
-
-      expect(summary).toContain('30:00');
-      expect(summary).toContain('5 mi');
-      expect(summary).toContain('6:00 /mi');
-    });
-
-    it('summarizes a strength entry by sets, unchanged', () => {
-      const entry: WeekEntry = {
-        id: 'strength-entry',
-        day: 0,
-        workoutId: 'w1',
-        workoutName: 'Bench Press',
-        muscleGroup: 'Chest',
-        sets: [{ reps: 10, weight: 60 }],
-      };
-
-      expect(view.entrySummary(entry)).toBe('10×60 lbs');
-    });
   });
 });

@@ -5,7 +5,10 @@
 Firebase project `gymbroapp-7b680`. Two pieces are used:
 
 - **Firebase Auth** — email/password and Google popup sign-in.
-- **Cloud Firestore** — all app data, scoped per-user under `users/{uid}`.
+- **Cloud Firestore** — app data scoped per-user under `users/{uid}`, plus two
+  top-level collections for the friend graph. The only per-user data another
+  user can read is `weeks/*/entries`, and only between accepted friends — see
+  [Reading a friend's week](#reading-a-friends-week).
 
 Config lives in `src/environments/environment.ts` (dev) and
 `environment.prod.ts` (prod), wired up in `app.config.ts` via
@@ -278,37 +281,90 @@ index**. `splitFriendships()` (`services/friends.ts`, pure and unit-tested) does
 the bucketing into friends / incoming / outgoing and the newest-first sort
 client-side.
 
+### Reading a friend's week
+
+Friends can open each other's week from the Friends page. Nothing is copied to do
+it: `WeekService.entriesFor(uid, weekId)` runs the *same* query the Weeks page
+runs, just against another uid, and the rules below decide whether it is allowed.
+
+That makes the security rule the only gate — which is why the client treats a
+failed read as its own state. `FriendWeekComponent` distinguishes three
+outcomes, where the Weeks page needs only two: `undefined` (loading), `[]` (an
+empty week), and `'failed'` (refused or offline). Showing a refused read as an
+empty week would quietly tell someone their friend skipped the gym.
+
+Only `weeks/*/entries` opens up. Weights, goals, settings and the workout library
+all stay under the owner-only rule.
+
 ### Firebase-console setup this repo can't ship
 
 Same situation as the collection-group index above — no rules file lives here.
 🟠 These rules are a reviewed starting point, not verified code: check them in the
-Rules Playground before trusting them.
+Rules Playground before trusting them. The friend-read rule in particular is
+worth exercising from all three sides — owner, accepted friend, and a stranger.
 
 ```
-match /userProfiles/{uid} {
-  allow read: if request.auth != null;
-  allow write: if request.auth != null && request.auth.uid == uid;
-}
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-match /friendships/{pairId} {
-  allow read:   if request.auth.uid in resource.data.members;
-  allow create: if request.auth.uid == request.resource.data.requesterUid
-                && request.auth.uid in request.resource.data.members
-                && request.resource.data.members.size() == 2
-                && request.resource.data.status == 'pending';
-  // Only the recipient can accept, and only pending → accepted.
-  allow update: if request.auth.uid in resource.data.members
-                && request.auth.uid != resource.data.requesterUid
-                && resource.data.status == 'pending'
-                && request.resource.data.status == 'accepted'
-                && request.resource.data.members == resource.data.members;
-  allow delete: if request.auth.uid in resource.data.members;
+    // Sorted-pair friendship id, matching friendshipId() in services/friends.ts.
+    function pairId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    // Is the signed-in user an *accepted* friend of otherUid? exists() first:
+    // get() on a missing document yields null, and reading .data off it fails.
+    function isAcceptedFriend(otherUid) {
+      let path = /databases/$(database)/documents/friendships/$(pairId(request.auth.uid, otherUid));
+      return exists(path) && get(path).data.status == 'accepted';
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // A friend's logged week — read-only, and only weeks/*/entries. Rules are
+    // OR-ed with the owner rule above, so this only ever adds access.
+    match /users/{userId}/weeks/{weekId}/entries/{entryId} {
+      allow read: if request.auth != null && isAcceptedFriend(userId);
+    }
+
+    match /{path=**}/entries/{entryId} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    match /userProfiles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /friendships/{pairId} {
+      allow read:   if request.auth.uid in resource.data.members;
+      allow create: if request.auth.uid == request.resource.data.requesterUid
+                    && request.auth.uid in request.resource.data.members
+                    && request.resource.data.members.size() == 2
+                    && request.resource.data.status == 'pending';
+      // Only the recipient can accept, and only pending → accepted.
+      allow update: if request.auth.uid in resource.data.members
+                    && request.auth.uid != resource.data.requesterUid
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status == 'accepted'
+                    && request.resource.data.members == resource.data.members;
+      allow delete: if request.auth.uid in resource.data.members;
+    }
+  }
 }
 ```
 
 Note what the `update` rule buys beyond "only the recipient accepts": because a
 `setDoc` onto an existing document counts as an update, it also refuses to
 re-open an already-accepted friendship as pending.
+
+`isAcceptedFriend` reads a second document, but only once per *query*, not once
+per entry — the condition depends on the path and `get()`, never on
+`resource.data`, which is also what keeps it usable for a collection query at
+all.
 
 Any signed-in user can read any profile — that is the deliberate price of search.
 It is why `emailLower` is stored lowercased for matching but never rendered, and

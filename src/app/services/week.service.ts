@@ -12,7 +12,7 @@ import {
   orderBy,
   serverTimestamp,
 } from '@angular/fire/firestore';
-import { combineLatest, of, switchMap } from 'rxjs';
+import { Observable, combineLatest, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 import { MuscleGroup } from './workout.service';
 
@@ -153,6 +153,28 @@ export function entryDate(weekId: string, day: number): string {
   return toWeekId(d);
 }
 
+/** e.g. "Jun 16 – Jun 22, 2026" for the week starting at `start` (a Monday). */
+export function weekRangeLabel(start: Date): string {
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  const startStr = start.toLocaleDateString('en-US', opts);
+  const endStr = end.toLocaleDateString('en-US', opts);
+  return `${startStr} – ${endStr}, ${end.getFullYear()}`;
+}
+
+/**
+ * Entries split into the 7 day columns, Monday first. Always returns 7 buckets,
+ * so a caller can index by day without a length check; each keeps the incoming
+ * order (newest first, as the query returns them). `undefined` in — i.e. still
+ * loading — gives 7 empty buckets rather than a special case.
+ */
+export function bucketByDay(entries: WeekEntry[] | undefined): WeekEntry[][] {
+  const buckets: WeekEntry[][] = [[], [], [], [], [], [], []];
+  for (const entry of entries ?? []) buckets[entry.day]?.push(entry);
+  return buckets;
+}
+
 @Injectable({ providedIn: 'root' })
 export class WeekService {
   private readonly firestore = inject(Firestore);
@@ -191,15 +213,7 @@ export class WeekService {
   }
 
   /** e.g. "Jun 16 – Jun 22, 2026". */
-  readonly rangeLabel = computed(() => {
-    const start = this.currentWeekStart();
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const startStr = start.toLocaleDateString('en-US', opts);
-    const endStr = end.toLocaleDateString('en-US', opts);
-    return `${startStr} – ${endStr}, ${end.getFullYear()}`;
-  });
+  readonly rangeLabel = computed(() => weekRangeLabel(this.currentWeekStart()));
 
   /**
    * Entries for the currently-viewed week only. Re-subscribes when the week or
@@ -212,22 +226,31 @@ export class WeekService {
       toObservable(this.weekId),
     ]).pipe(
       switchMap(([user, weekId]) =>
-        user
-          ? collectionData(
-              query(
-                this.weekEntries(user.uid, weekId),
-                orderBy('createdAt', 'desc')
-              ),
-              // 'estimate' fills a just-added doc's pending server timestamp
-              // with a local estimate instead of null, so it sorts to the top
-              // immediately rather than jumping into place when the write lands.
-              { idField: 'id', serverTimestamps: 'estimate' }
-            )
-          : of(undefined)
+        user ? this.entriesFor(user.uid, weekId) : of(undefined)
       )
     ),
     { initialValue: undefined }
   ) as () => WeekEntry[] | undefined;
+
+  /**
+   * A live stream of one person's week, by uid — the query behind {@link entries},
+   * exposed because a week is no longer only its owner's to read: the Friends
+   * page renders an accepted friend's week through this same path.
+   *
+   * Taking a uid is *not* an authorization decision. Firestore rules are, and a
+   * caller reading someone else's week gets an errored stream unless the two are
+   * accepted friends (see `.claude/wiki/database.md`). Such callers must handle
+   * that error; {@link entries} never can, since a user can always read itself.
+   */
+  entriesFor(uid: string, weekId: string): Observable<WeekEntry[]> {
+    return collectionData(
+      query(this.weekEntries(uid, weekId), orderBy('createdAt', 'desc')),
+      // 'estimate' fills a just-added doc's pending server timestamp with a
+      // local estimate instead of null, so it sorts to the top immediately
+      // rather than jumping into place when the write lands.
+      { idField: 'id', serverTimestamps: 'estimate' }
+    ) as Observable<WeekEntry[]>;
+  }
 
   previousWeek(): void {
     this.shiftWeeks(-1);
