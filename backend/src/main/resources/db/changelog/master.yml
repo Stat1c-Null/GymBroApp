@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/001-users.sql
+  - include:
+      file: db/changelog/002-settings.sql
+  - include:
+      file: db/changelog/003-exercises.sql
+  - include:
+      file: db/changelog/004-weeks-entries.sql
+  - include:
+      file: db/changelog/005-weights-friends.sql
+  - include:
+      file: db/changelog/006-enums.sql
+  - include:
+      file: db/changelog/007-versions.sql
+  - include:
+      file: db/changelog/008-versions-more.sql

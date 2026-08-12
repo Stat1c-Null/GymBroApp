@@ -1,0 +1,48 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gymbro-db
+    environment:
+      POSTGRES_DB: gymbro
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gymbro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - gymbro-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gymbro-api
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/gymbro
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
+      SHOW_SQL: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - gymbro-network
+
+volumes:
+  pgdata:
+
+networks:
+  gymbro-network:
+    driver: bridge
