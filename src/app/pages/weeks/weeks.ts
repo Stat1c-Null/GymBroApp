@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
@@ -9,7 +9,12 @@ import {
   CARDIO_GROUP,
   isOrphanGroup,
 } from '../../services/workout.service';
-import { displayLifted, liftedToCanonical } from '../../services/weight.service';
+import {
+  WeightService,
+  displayLifted,
+  liftedToCanonical,
+  weightIn,
+} from '../../services/weight.service';
 import {
   displayDistance,
   distanceToCanonical,
@@ -21,6 +26,7 @@ import { ModalComponent } from '../../components/modal/modal';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
 import { WeekGridComponent } from '../../components/week-grid/week-grid';
 import { WeekNavComponent } from '../../components/week-nav/week-nav';
+import { BodyWeightPromptComponent } from '../../components/body-weight-prompt/body-weight-prompt';
 import {
   WeekService,
   WeekEntry,
@@ -51,6 +57,20 @@ interface SetRow {
   timeText: string;
 }
 
+/**
+ * What a set row's weight field starts out as: the value to store (canonical
+ * lbs) paired with the value to show (the user's unit).
+ *
+ * The two travel together because they aren't always derived from each other. A
+ * body-weight seed takes its display value straight off the weigh-in's own `kg`
+ * field, so the row reads exactly like the Weight page instead of a converted
+ * (and re-rounded) approximation of it.
+ */
+interface WeightSeed {
+  canonical: number | null;
+  display: number | null;
+}
+
 @Component({
   selector: 'app-weeks',
   standalone: true,
@@ -60,6 +80,7 @@ interface SetRow {
     WorkoutFormModalComponent,
     WeekGridComponent,
     WeekNavComponent,
+    BodyWeightPromptComponent,
   ],
   templateUrl: './weeks.html',
   styleUrl: './weeks.css',
@@ -69,6 +90,7 @@ export class WeeksComponent {
   private readonly workoutService = inject(WorkoutService);
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
+  private readonly weightService = inject(WeightService);
 
   /** Groups offered in the modal's dropdown: the reserved "Cardio" category
    *  always first, then the user's groups, then "Unassigned" when the
@@ -147,6 +169,44 @@ export class WeeksComponent {
     this.distanceUnit() === 'mi' ? 'ft' : 'm'
   );
 
+  // --- Body-weight exercises (pull-ups, dips, …) ---
+
+  /** Whether the modal's selected workout is flagged as body-weight: every set
+   *  is loaded by the user's own weight, so the weight field is filled from the
+   *  weigh-in log and shown read-only. Reps and time are still theirs to enter. */
+  protected readonly isBodyWeight = computed(() => this.selectedWorkout()?.bodyWeight === true);
+
+  /** The user's most recent weigh-in — the log is ordered newest-first — or
+   *  `null` while it loads and when they've never logged one. */
+  private readonly latestWeighIn = computed(() => this.weightService.weights()?.[0] ?? null);
+
+  /** That weigh-in in the user's unit, for the modal's hint line. `null` when
+   *  there's nothing to auto-fill from, which the hint says instead. */
+  protected readonly bodyWeightDisplay = computed(() => {
+    const latest = this.latestWeighIn();
+    return latest ? weightIn(latest, this.settings.unit()) : null;
+  });
+
+  constructor() {
+    // The weigh-in log streams in asynchronously, so a body-weight exercise can
+    // be picked before it arrives — leaving rows seeded with nothing. Re-seed
+    // them once it lands. Safe to overwrite: the field is read-only for these,
+    // so there is no user input to clobber. `untracked` keeps the write to
+    // setRows (which reseedWeights also reads) out of this effect's own
+    // dependencies, so it can't retrigger itself.
+    effect(() => {
+      const latest = this.latestWeighIn();
+      if (!latest) return;
+      untracked(() => {
+        // Adding only. An entry being edited keeps the weight it was logged at
+        // — a weigh-in landing mid-edit must not rewrite that history.
+        if (!this.showModal() || this.editingId() !== null) return;
+        if (!this.isBodyWeight()) return;
+        this.reseedWeights(this.weightSeedFor(this.selectedWorkout()));
+      });
+    });
+  }
+
   // --- Cardio session fields (one per logged day — no per-set breakdown). ---
   protected readonly cardioTimeText = signal('');
   protected readonly cardioDistance = signal<number | null>(null);
@@ -190,7 +250,7 @@ export class WeeksComponent {
         entry.trackTime ?? entry.sets.some((s) => s.time != null)
       );
       this.rowPool = entry.sets.map((s) =>
-        this.seedRow(s.weight, s.reps, formatTime(s.time ?? null))
+        this.seedRow(this.canonicalSeed(s.weight), s.reps, formatTime(s.time ?? null))
       );
       this.setRows.set(this.rowPool.slice());
       this.resetCardioFields();
@@ -228,7 +288,7 @@ export class WeeksComponent {
       this.setRows.set([]);
       this.resetCardioFields();
     } else {
-      this.reseedWeights(workout.usualWeight ?? null);
+      this.reseedWeights(this.weightSeedFor(workout));
     }
   }
 
@@ -246,17 +306,18 @@ export class WeeksComponent {
       this.resetCardioFields();
       return;
     }
-    // Re-default each set's weight to the newly chosen workout's usual weight.
-    this.reseedWeights(this.selectedWorkout()?.usualWeight ?? null);
+    // Re-default each set's weight for the newly chosen workout: its usual
+    // weight, or the latest weigh-in if it's a body-weight exercise.
+    this.reseedWeights(this.weightSeedFor(this.selectedWorkout()));
   }
 
   /** Grow/shrink the visible per-set rows. Shrinking only hides rows (they
    *  stay in the pool with their data); growing brings them back. */
   protected onSetsCountChange(value: number | null): void {
     const count = Math.max(0, Math.min(Math.floor(value ?? 0), 20));
-    const canonicalWeight = this.selectedWorkout()?.usualWeight ?? null;
+    const seed = this.weightSeedFor(this.selectedWorkout());
     while (this.rowPool.length < count) {
-      this.rowPool.push(this.seedRow(canonicalWeight));
+      this.rowPool.push(this.seedRow(seed));
     }
     this.setRows.set(this.rowPool.slice(0, count));
   }
@@ -353,8 +414,10 @@ export class WeeksComponent {
     baseMessage: string
   ): Promise<string> {
     // Cardio workouts have no usualWeight concept — sets is always [] for
-    // them anyway, but bail explicitly rather than relying on that.
-    if (workout.muscleGroup === CARDIO_GROUP) {
+    // them anyway, but bail explicitly rather than relying on that. Body-weight
+    // exercises have none either: their sets carry today's weigh-in, and writing
+    // that back would freeze one day's body weight into the library.
+    if (workout.muscleGroup === CARDIO_GROUP || workout.bodyWeight) {
       return baseMessage;
     }
     const newUsual = uniformWeight(sets);
@@ -386,25 +449,49 @@ export class WeeksComponent {
     }
   }
 
-  /** A set row seeded from a stored (canonical lbs) weight. See {@link SetRow}. */
+  /** What to seed a set row's weight with for `workout`: the latest weigh-in
+   *  for a body-weight exercise, otherwise the workout's usual weight. Returns
+   *  a blank seed when a body-weight exercise is picked before any weigh-in
+   *  exists — the modal swaps in `BodyWeightPromptComponent` to log one, and
+   *  the effect above fills the rows in as soon as it lands. */
+  private weightSeedFor(workout: Workout | null): WeightSeed {
+    if (workout?.bodyWeight) {
+      const latest = this.latestWeighIn();
+      return latest
+        ? { canonical: latest.lbs, display: weightIn(latest, this.settings.unit()) }
+        : { canonical: null, display: null };
+    }
+    return this.canonicalSeed(workout?.usualWeight ?? null);
+  }
+
+  /** A seed for a stored (canonical lbs) weight, shown in the user's unit. */
+  private canonicalSeed(canonical: number | null): WeightSeed {
+    return { canonical, display: displayLifted(canonical, this.settings.unit()) };
+  }
+
+  /** A set row seeded from a {@link WeightSeed}. See {@link SetRow}. */
   private seedRow(
-    canonicalWeight: number | null,
+    seed: WeightSeed,
     reps: number | null = null,
     timeText = ''
   ): SetRow {
-    const weight = displayLifted(canonicalWeight, this.settings.unit());
-    return { reps, weight, canonicalWeight, seededWeight: weight, timeText };
+    return {
+      reps,
+      weight: seed.display,
+      canonicalWeight: seed.canonical,
+      seededWeight: seed.display,
+      timeText,
+    };
   }
 
   /** Re-seed every pooled row's weight (e.g. the selected workout changed),
    *  leaving reps and time intact. */
-  private reseedWeights(canonicalWeight: number | null): void {
-    const weight = displayLifted(canonicalWeight, this.settings.unit());
+  private reseedWeights(seed: WeightSeed): void {
     this.rowPool = this.rowPool.map((r) => ({
       ...r,
-      weight,
-      canonicalWeight,
-      seededWeight: weight,
+      weight: seed.display,
+      canonicalWeight: seed.canonical,
+      seededWeight: seed.display,
     }));
     this.setRows.set(this.rowPool.slice(0, this.setRows().length));
   }

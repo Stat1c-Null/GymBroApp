@@ -1,5 +1,5 @@
-import { TestBed } from '@angular/core/testing';
-import type { WritableSignal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal, type WritableSignal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WeeksComponent } from './weeks';
 import {
@@ -11,7 +11,8 @@ import {
   formatTime,
   uniformWeight,
 } from '../../services/week.service';
-import { WorkoutService, CARDIO_GROUP } from '../../services/workout.service';
+import { WorkoutService, Workout, CARDIO_GROUP } from '../../services/workout.service';
+import { WeightService, WeightEntry } from '../../services/weight.service';
 import { distanceToCanonical, elevationToCanonical } from '../../services/cardio';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
@@ -27,11 +28,7 @@ interface WeeksView {
   onDelete: (entry: WeekEntry) => Promise<void>;
   toggleModalTrackTime: () => void;
   modalTrackTime: () => boolean;
-  onWorkoutCreated: (workout: {
-    id?: string;
-    muscleGroup: string;
-    usualWeight: number | null;
-  }) => void;
+  onWorkoutCreated: (workout: Workout) => void;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
@@ -40,6 +37,8 @@ interface WeeksView {
   modalWorkoutId: () => string;
   filteredWorkouts: () => { id?: string }[];
   isCardio: () => boolean;
+  isBodyWeight: () => boolean;
+  bodyWeightDisplay: () => number | null;
   cardioTimeText: WritableSignal<string>;
   cardioDistance: WritableSignal<number | null>;
   cardioHeartRate: WritableSignal<number | null>;
@@ -65,19 +64,31 @@ const ORPHAN_WORKOUT = {
   maxWeight: 50,
 };
 
-const CARDIO_WORKOUT: {
-  id: string;
-  name: string;
-  muscleGroup: string;
-  usualWeight: number | null;
-  maxWeight: number | null;
-} = {
+const CARDIO_WORKOUT: Workout = {
   id: 'w3',
   name: 'Morning Run',
   muscleGroup: CARDIO_GROUP,
   usualWeight: null,
   maxWeight: null,
 };
+
+/** A body-weight exercise: no usual/max weight of its own — every set is
+ *  filled in from the user's latest weigh-in. */
+const BODYWEIGHT_WORKOUT: Workout = {
+  id: 'w4',
+  name: 'Pull-ups',
+  muscleGroup: 'Back',
+  usualWeight: null,
+  maxWeight: null,
+  bodyWeight: true,
+};
+
+/** Weigh-ins are read newest-first, so index 0 is the current body weight.
+ *  Both units are stored on every entry — see `WeightEntry`. */
+const WEIGH_INS: WeightEntry[] = [
+  { id: 'wt2', kg: 80, lbs: 176.4 },
+  { id: 'wt1', kg: 81, lbs: 178.6 },
+];
 
 describe('week.service date helpers', () => {
   it('mondayOf returns the Monday of that week', () => {
@@ -131,9 +142,11 @@ describe('uniformWeight', () => {
 });
 
 describe('WeeksComponent', () => {
+  let fixture: ComponentFixture<WeeksComponent>;
   let view: WeeksView;
   let entriesData: WeekEntry[];
   let distanceUnitValue: 'mi' | 'km';
+  let unitValue: 'kg' | 'lbs';
   let service: {
     entries: () => WeekEntry[];
     rangeLabel: () => string;
@@ -149,13 +162,16 @@ describe('WeeksComponent', () => {
   };
   let toast: { show: ReturnType<typeof vi.fn> };
   let workoutService: {
-    workouts: () => (typeof SAMPLE_WORKOUT | typeof CARDIO_WORKOUT)[];
+    workouts: () => Workout[];
     update: ReturnType<typeof vi.fn>;
   };
+  let weighIns: WritableSignal<WeightEntry[] | undefined>;
+  let weightService: { weights: () => WeightEntry[] | undefined };
 
   beforeEach(async () => {
     entriesData = [];
     distanceUnitValue = 'mi';
+    unitValue = 'lbs';
     service = {
       entries: () => entriesData,
       rangeLabel: () => 'Jun 16 – Jun 22, 2026',
@@ -171,21 +187,31 @@ describe('WeeksComponent', () => {
     };
     toast = { show: vi.fn() };
     workoutService = {
-      workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT, CARDIO_WORKOUT],
+      workouts: () => [
+        SAMPLE_WORKOUT,
+        ORPHAN_WORKOUT,
+        CARDIO_WORKOUT,
+        BODYWEIGHT_WORKOUT,
+      ],
       update: vi.fn().mockResolvedValue(undefined),
     };
+    // A signal so a test can land the log *after* the modal is already open,
+    // the way the live Firestore stream does.
+    weighIns = signal<WeightEntry[] | undefined>(WEIGH_INS);
+    weightService = { weights: () => weighIns() };
 
     await TestBed.configureTestingModule({
       imports: [WeeksComponent],
       providers: [
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: workoutService },
+        { provide: WeightService, useValue: weightService },
         { provide: ToastService, useValue: toast },
         {
           provide: SettingsService,
           useValue: {
             showSetTime: () => false,
-            unit: () => 'lbs',
+            unit: () => unitValue,
             muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
             distanceUnit: () => distanceUnitValue,
           },
@@ -193,8 +219,8 @@ describe('WeeksComponent', () => {
       ],
     }).compileComponents();
 
-    view = TestBed.createComponent(WeeksComponent)
-      .componentInstance as unknown as WeeksView;
+    fixture = TestBed.createComponent(WeeksComponent);
+    view = fixture.componentInstance as unknown as WeeksView;
   });
 
   it('builds set rows with weight defaulted from the chosen workout', () => {
@@ -470,7 +496,13 @@ describe('WeeksComponent', () => {
     view.onWorkoutChange('w1');
     view.onSetsCountChange(2);
 
-    view.onWorkoutCreated({ id: 'new-w', muscleGroup: 'Back', usualWeight: 50 });
+    view.onWorkoutCreated({
+      id: 'new-w',
+      name: 'Barbell Row',
+      muscleGroup: 'Back',
+      usualWeight: 50,
+      maxWeight: 70,
+    });
 
     // The new workout's group + id are selected, and the in-progress set rows
     // are preserved (not wiped by a group change).
@@ -485,7 +517,13 @@ describe('WeeksComponent', () => {
     view.onWorkoutChange('w1');
     view.onSetsCountChange(2);
 
-    view.onWorkoutCreated({ id: 'new-cardio', muscleGroup: CARDIO_GROUP, usualWeight: null });
+    view.onWorkoutCreated({
+      id: 'new-cardio',
+      name: 'Evening Run',
+      muscleGroup: CARDIO_GROUP,
+      usualWeight: null,
+      maxWeight: null,
+    });
 
     expect(view.modalMuscleGroup()).toBe(CARDIO_GROUP);
     expect(view.modalWorkoutId()).toBe('new-cardio');
@@ -669,6 +707,142 @@ describe('WeeksComponent', () => {
         cardio: { time: 1800, distance: 6, heartRate: null, elevation: null },
       });
     });
+  });
 
+  describe('body-weight exercises', () => {
+    it('fills every set with the latest weigh-in instead of a usual weight', () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(3);
+
+      expect(view.isBodyWeight()).toBe(true);
+      expect(view.bodyWeightDisplay()).toBe(176.4);
+      // Newest weigh-in, not the older one.
+      expect(view.setRows().map((r) => r.weight)).toEqual([176.4, 176.4, 176.4]);
+    });
+
+    it('saves the weigh-in as each set’s weight', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      view.setRows().forEach((r) => (r.reps = 8));
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith({
+        day: 0,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        trackTime: false,
+        sets: [
+          { reps: 8, weight: 176.4, time: null },
+          { reps: 8, weight: 176.4, time: null },
+        ],
+      });
+    });
+
+    it('never writes the body weight back as the workout’s usual weight', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      view.setRows().forEach((r) => (r.reps = 8));
+
+      await view.onSubmit();
+
+      // Every set agrees on one weight, which would normally sync back — but
+      // that would freeze one day's body weight into the library.
+      expect(workoutService.update).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+    });
+
+    it('shows kg from the weigh-in’s own field but still stores canonical lbs', async () => {
+      unitValue = 'kg';
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      // Read straight off WeightEntry.kg — not lbs re-converted (176.4 lbs →
+      // 80.0 kg here, but rounding makes that coincidence unreliable).
+      expect(view.setRows()[0].weight).toBe(80);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ sets: [{ reps: 8, weight: 176.4, time: null }] })
+      );
+    });
+
+    it('leaves the weight blank when nothing has ever been weighed in', async () => {
+      weighIns.set([]);
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      expect(view.bodyWeightDisplay()).toBeNull();
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ sets: [{ reps: 8, weight: null, time: null }] })
+      );
+    });
+
+    it('fills the rows in when the weigh-in log arrives after the modal is open', () => {
+      weighIns.set(undefined); // still loading
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      expect(view.setRows().every((r) => r.weight === null)).toBe(true);
+
+      weighIns.set(WEIGH_INS);
+      fixture.detectChanges(); // runs the re-seed effect
+
+      expect(view.setRows().map((r) => r.weight)).toEqual([176.4, 176.4]);
+    });
+
+    it('keeps the weight an entry was logged at when editing, not today’s', () => {
+      const entry: WeekEntry = {
+        id: 'old-pullups',
+        day: 1,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        sets: [{ reps: 8, weight: 190 }],
+      };
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+
+      expect(view.isBodyWeight()).toBe(true);
+      // 190 lbs then, 176.4 lbs now — history keeps what actually happened.
+      expect(view.setRows()[0].weight).toBe(190);
+    });
+
+    it('does not let a weigh-in arriving mid-edit rewrite the logged weight', () => {
+      const entry: WeekEntry = {
+        id: 'old-pullups',
+        day: 1,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        sets: [{ reps: 8, weight: 190 }],
+      };
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+      weighIns.set([{ id: 'wt3', kg: 79, lbs: 174.2 }]);
+      fixture.detectChanges(); // the re-seed effect must skip an entry being edited
+
+      expect(view.setRows()[0].weight).toBe(190);
+    });
   });
 });

@@ -56,6 +56,19 @@ export interface Workout {
   muscleGroup: MuscleGroup;
   usualWeight: number | null;
   maxWeight: number | null;
+  /**
+   * Whether this exercise is loaded by the user's own body weight (pull-ups,
+   * dips, push-ups). Optional: workouts saved before this field existed simply
+   * lack it, which reads the same as `false` — no migration needed.
+   *
+   * It *replaces* the usual/max weight inputs rather than adding to them. There
+   * is no per-workout weight to store, because logging one auto-fills every
+   * set's weight from the latest weigh-in in `users/{uid}/weights` and makes the
+   * field read-only — see `WeeksComponent.weightSeedFor` in `pages/weeks/weeks.ts`.
+   * `usualWeight`/`maxWeight` are therefore always saved as `null` here, the same
+   * way {@link CARDIO_GROUP} workouts do.
+   */
+  bodyWeight?: boolean;
   createdAt?: unknown; // Firestore serverTimestamp
 }
 

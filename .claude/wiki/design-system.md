@@ -49,9 +49,11 @@ as component-scoped styles:
 - **Cards**: `.glass-card` — the frosted-glass card look (`backdrop-filter:
   blur`) used for the dashboard welcome card, list rows, empty states, etc.
 - **Forms**: `.form-group` / `.form-label` / `.form-input` / `.form-error` /
-  `.form-row` (two fields side by side). **`.form-hint` is *not* global** despite
-  looking like it — it's duplicated locally in `pages/weights/weights.css` and
-  `pages/weeks/weeks.css`. Promote it to `styles.css` if a third page needs it.
+  `.form-row` (two fields side by side) / `.form-hint` (the small muted line
+  under a field). `.form-hint` used to be duplicated per page; it went global
+  once a third caller (the create-workout modal) needed it. `pages/weights/`
+  still defines its own — a deliberate variant with a negative `margin-top`,
+  and component-scoped styles out-specify the global rule, so it wins there.
 - **Page shell**: `.page` (max-width wrapper) / `.page-title` /
   `.page-subtitle` — every routed page (except auth pages, which use
   `AuthLayoutComponent` instead) opens with `<section class="page">`.

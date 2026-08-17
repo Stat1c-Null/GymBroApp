@@ -99,6 +99,19 @@ cardio or strength summary depending on `muscleGroup`. See
 data shape and unit handling. The usual-weight write-back above is a no-op
 for cardio entries (they carry no `sets` to check).
 
+Body-weight exercises: when the selected workout is flagged `bodyWeight`
+(`WeeksComponent.isBodyWeight`), every set's weight is filled from the user's
+latest weigh-in and shown read-only — reps and the optional time stay editable,
+and a hint line names the weight being used. The weigh-in log streams in
+asynchronously, so an effect re-seeds the open modal's rows if the log lands
+after a body-weight workout was picked (skipped while *editing* an entry, whose
+weight is history). With an **empty** log there's nothing to fill from, so
+`BodyWeightPromptComponent` takes the hint's place and logs a weigh-in inline —
+the same stream then fills the rows. Sending the user to `/weights` instead
+would have cost them the sets they'd already entered. The usual-weight
+write-back above is skipped for these, the same way it is for cardio. See
+[Database → Body-weight exercises](./database.md#body-weight-exercises).
+
 ## Workouts (exercise library)
 
 **Files**: `services/workout.service.ts`, `pages/workouts/`,
@@ -129,15 +142,34 @@ the usual/max weight inputs entirely; see
 [Database → The Cardio category](./database.md#the-cardio-category).
 Logging one is a Weeks-page feature — see below.
 
+A **"Body weight"** toggle sits where the usual/max weight inputs are (hidden
+for Cardio, which has no weights at all). Turning it on replaces those two
+inputs — there is no per-workout weight to enter, because the weight comes from
+the weigh-in log at logging time. The library card shows "body weight" instead
+of the usual/max stats. If the weight log is empty,
+`BodyWeightPromptComponent` appears under the toggle so the first weigh-in can
+be logged without leaving the form — the exercise is useless until one exists.
+See
+[Database → Body-weight exercises](./database.md#body-weight-exercises) for the
+stored shape, and Weeks above for what logging one does.
+
 ## Weights (body weight tracking)
 
-**Files**: `services/weight.service.ts`, `pages/weights/`.
+**Files**: `services/weight.service.ts`, `pages/weights/`,
+`components/body-weight-prompt/`.
 
 A simple timestamped log of body weight. The add form accepts *either*
 kilograms or pounds; whichever is filled is treated as canonical and the
 other is derived via `convertWeight()` (kg wins if somehow both are filled —
 the form only surfaces one input at a time in practice). Both units are
 persisted so the list can display both without a live conversion on read.
+
+This page is no longer the only way in. `BodyWeightPromptComponent` writes to
+the same collection from the Workouts and Weeks modals, for the case where a
+body-weight exercise has no weigh-in to draw on — see
+[Workouts](#workouts-exercise-library). It asks for one number in the user's
+display unit rather than the kg/lbs pair above (it's a detour out of another
+form, not the weight log itself) and derives the other unit the same way.
 
 ## Settings
 

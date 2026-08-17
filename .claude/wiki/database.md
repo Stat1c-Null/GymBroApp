@@ -84,6 +84,8 @@ The user's exercise library (`WorkoutService`). Shape (`Workout`):
                                  // settings.muscleGroups at the UI layer only
   usualWeight: number | null;   // ALWAYS pounds — see Weight unit handling
   maxWeight: number | null;
+  bodyWeight?: boolean;         // exercise loaded by the user's own body weight;
+                                 // when true both weights above are null — see below
   createdAt: Timestamp;         // serverTimestamp()
 }
 ```
@@ -94,6 +96,36 @@ Ordered `orderBy('createdAt', 'desc')` — newest workout first.
 `WeeksComponent` (Weeks page) also writes it: logging a day's sets with a
 uniform weight different from the current value pushes that weight back onto
 the workout — see [Features → Weeks](./features.md#weeks-weekly-workout-logging).
+
+#### Body-weight exercises
+
+`bodyWeight: true` marks an exercise loaded by the user's own weight (pull-ups,
+dips). It is a **third mutually exclusive weight mode** alongside the normal
+usual/max pair and [Cardio](#the-cardio-category), and it *replaces* those two
+inputs in the form rather than adding to them — so `usualWeight`/`maxWeight` are
+always written as `null`, exactly like Cardio.
+
+The flag is optional: workouts saved before it existed simply lack the field,
+which reads the same as `false`. No migration, same trick as `Cardio` being
+absent from `settings.muscleGroups`.
+
+Nothing about the weight is stored on the *workout*. Logging one seeds every
+set's `weight` from the newest entry in
+[`users/{uid}/weights`](#usersuidweightsweightid) (canonical lbs, from that
+entry's own `lbs` field) and renders the field read-only — reps and time stay
+editable. An empty weight log is therefore a dead end, which
+`BodyWeightPromptComponent` fills inline rather than routing the user off to
+`/weights` — see [Features → Weights](./features.md#weights-body-weight-tracking).
+Two consequences worth knowing:
+
+- **Set weights are still plain stored numbers.** Analytics (1RM, volume, …)
+  and the entry summary need no special case; a logged body-weight set looks
+  like any other set that happens to weigh 176.4 lbs.
+- **The usual-weight write-back is skipped** for these
+  (`WeeksComponent.syncUsualWeight`, the same bail-out Cardio gets). Every set
+  agreeing on one weight would otherwise sync it into the library and freeze one
+  day's body weight there. Editing an old entry likewise keeps the weight it was
+  logged at, never today's — the log reflects reality at logging time.
 
 ### `users/{uid}/weights/{weightId}`
 

@@ -11,13 +11,9 @@
   flex-direction: column;
 }
 
-/* Modal: per-set reps + weight rows */
-.form-hint {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
+/* Modal: per-set reps + weight rows. (.form-hint is global — see styles.css.)
 
-/* Label for the in-modal "Track time per set" toggle. The .setting-item card
+   Label for the in-modal "Track time per set" toggle. The .setting-item card
    and switch styles are global; only this label needs styling since
    .setting-text is scoped to the Settings page. */
 .modal-toggle-label {
@@ -70,6 +66,14 @@
 
 .set-row .form-input {
   padding: 10px 12px;
+}
+
+/* Body-weight exercises take their weight from the latest weigh-in, so the
+   weight column is a read-only value in place of the number input. */
+.set-weight-static {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* On small screens the grid stacks (handled inside week-grid), so the page no

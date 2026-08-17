@@ -40,9 +40,15 @@
                     <div class="list-meta">
                       @if (g.group !== cardioGroup) {
                         <div class="list-stats">
-                          <span>usual <strong>{{ w.usualWeight | lifted: unit() }}</strong></span>
-                          <span class="dot">·</span>
-                          <span>max <strong>{{ w.maxWeight | lifted: unit() }}</strong></span>
+                          @if (w.bodyWeight) {
+                            <!-- Loaded by the user's own weight, so there's no
+                                 usual/max of its own to show. -->
+                            <span><strong>body weight</strong></span>
+                          } @else {
+                            <span>usual <strong>{{ w.usualWeight | lifted: unit() }}</strong></span>
+                            <span class="dot">·</span>
+                            <span>max <strong>{{ w.maxWeight | lifted: unit() }}</strong></span>
+                          }
                         </div>
                       }
                       <div class="list-actions">

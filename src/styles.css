@@ -204,6 +204,13 @@ a:hover {
   gap: 4px;
 }
 
+/* Explanatory line under a field ("Pace: 6:00 /mi", "no weight to enter").
+   Shared: the Weeks logging modal and the create-workout modal. */
+.form-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 /* ---- Buttons ---- */
 .btn {
   display: inline-flex;

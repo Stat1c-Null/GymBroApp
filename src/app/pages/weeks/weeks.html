@@ -105,6 +105,18 @@
           </button>
         </div>
 
+        @if (isBodyWeight()) {
+          @if (bodyWeightDisplay(); as bodyWeight) {
+            <p class="form-hint mb-2">
+              Weight auto-filled from your latest weigh-in ({{ bodyWeight }} {{ unit() }}).
+            </p>
+          } @else {
+            <!-- Log it right here rather than sending them off to /weights and
+                 losing the sets they've already entered. -->
+            <app-body-weight-prompt />
+          }
+        }
+
         @if (setRows().length) {
           <div class="set-rows">
             @for (s of setRows(); track $index) {
@@ -112,8 +124,16 @@
                 <span class="set-index">Set {{ $index + 1 }}</span>
                 <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
                   [name]="'reps' + $index" aria-label="Reps" />
-                <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
-                  [name]="'weight' + $index" aria-label="Weight" />
+                @if (isBodyWeight()) {
+                  <!-- Read-only: a body-weight exercise weighs whatever you
+                       weigh, so there's nothing per-set to change here. -->
+                  <span class="set-weight-static" aria-label="Weight">
+                    {{ s.weight != null ? s.weight + ' ' + unit() : '—' }}
+                  </span>
+                } @else {
+                  <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
+                    [name]="'weight' + $index" aria-label="Weight" />
+                }
                 @if (modalTrackTime()) {
                   <input class="form-input" type="text" placeholder="m:ss"
                     [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
