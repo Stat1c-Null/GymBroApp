@@ -159,6 +159,7 @@ Shape (`WeekEntry`):
   workoutName: string;         // denormalized copy — see below
   muscleGroup: string;         // denormalized copy — see below
   trackTime?: boolean;         // per-entry override of the global showSetTime setting
+  notes?: string;              // free-text note; always written, '' when none — see below
   sets: {
     reps: number | null;
     weight: number | null;
@@ -180,6 +181,22 @@ Only the *current* week's entries are subscribed to at a time — the
 `entries` signal re-subscribes via `switchMap` when `weekId` changes, so
 navigating Prev/Next week loads on demand rather than loading the user's
 entire history up front.
+
+#### Workout notes
+
+`notes` is a free-text note about how the session went, gated in the logging
+modal by a toggle that mirrors "Track time per set" — but with **no global
+default setting** behind it (see [Features → Weeks](./features.md#weeks-weekly-workout-logging)).
+It applies to cardio sessions as well as strength ones, so `WeeksComponent`
+builds it into the shared `base` object rather than the strength-only branch
+`trackTime` lives in.
+
+The field is **always written, as `''` when there is none**. That is not
+cosmetic: `WeekService.update` uses `updateDoc`, which ignores a key that isn't
+in the payload — so omitting `notes` could never *clear* a note the user just
+removed, and Firestore rejects `undefined` outright. Readers treat `''` and a
+missing field alike, so entries logged before the field existed need no
+migration, same as `trackTime`.
 
 ### Cross-week analytics reads (the exception)
 
@@ -333,6 +350,11 @@ Exactly two subtrees open up, both read-only:
 |---|---|
 | `users/{uid}/weeks/*/entries` | `FriendWeekComponent` — the whole week, any week |
 | `users/{uid}/weights` | `FriendWeightComponent` — the last `RECENT_WEIGHTS` weigh-ins |
+
+Note that a week entry now carries a free-text `notes` field, so **an accepted
+friend can read your workout notes**, and `WeekGridComponent` renders them in the
+friend panel exactly as it does on your own Weeks page. There is no per-note
+privacy control; hiding them in the UI would not change what the rule permits.
 
 The weight window is bounded in the *query* (`orderBy` + `limit`), which is a
 product decision, not a security boundary — the rule permits the whole

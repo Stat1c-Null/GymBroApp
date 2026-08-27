@@ -186,6 +186,14 @@ a:hover {
   box-shadow: 0 0 0 3px hsla(0, 80%, 60%, 0.15);
 }
 
+/* Multi-line companion to .form-input — pair the two classes on a <textarea>
+   so the input chrome stays defined in exactly one place. */
+.form-textarea {
+  min-height: 4.5rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .form-label {
   display: block;
   font-size: 0.85rem;

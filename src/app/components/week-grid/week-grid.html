@@ -40,6 +40,9 @@
                 }
               </div>
               <span class="day-entry-sets">{{ summaryOf(e) }}</span>
+              @if (e.notes) {
+                <p class="day-entry-notes" [title]="e.notes">{{ e.notes }}</p>
+              }
             </div>
           } @empty {
             <p class="day-empty">No workouts</p>

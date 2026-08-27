@@ -111,6 +111,14 @@ export class WeeksComponent {
    *  editing. When on, each set row shows an m:ss time field. */
   protected readonly modalTrackTime = signal(false);
 
+  /** Whether the open modal is collecting a note. Off when adding; on when
+   *  editing an entry that already has one. Unlike {@link modalTrackTime} this
+   *  has no global default — a note is occasional, not a standing preference. */
+  protected readonly modalHasNotes = signal(false);
+
+  /** The note text for the open modal. */
+  protected readonly modalNotes = signal('');
+
   protected readonly unit = this.settings.unit;
 
   // --- Week state (delegated to the service; the grid itself is shared) ---
@@ -231,6 +239,8 @@ export class WeeksComponent {
     this.rowPool = [];
     this.setRows.set([]);
     this.resetCardioFields();
+    this.modalHasNotes.set(false);
+    this.modalNotes.set('');
     this.error.set('');
     this.showModal.set(true);
   }
@@ -255,12 +265,20 @@ export class WeeksComponent {
       this.setRows.set(this.rowPool.slice());
       this.resetCardioFields();
     }
+    // Seeded outside the cardio/strength split above: a note belongs to either
+    // kind of session.
+    this.modalNotes.set(entry.notes ?? '');
+    this.modalHasNotes.set(!!entry.notes);
     this.error.set('');
     this.showModal.set(true);
   }
 
   protected toggleModalTrackTime(): void {
     this.modalTrackTime.update((v) => !v);
+  }
+
+  protected toggleModalNotes(): void {
+    this.modalHasNotes.update((v) => !v);
   }
 
   protected closeModal(): void {
@@ -364,11 +382,15 @@ export class WeeksComponent {
     this.saving.set(true);
     this.error.set('');
     const trackTime = this.modalTrackTime();
+    // '' rather than omitted: `update` uses `updateDoc`, which ignores a missing
+    // key — leaving a note the user just cleared sitting in the document.
+    const notes = this.modalHasNotes() ? this.modalNotes().trim() : '';
     const base = {
       day,
       workoutId: workout.id,
       workoutName: workout.name,
       muscleGroup: workout.muscleGroup,
+      notes,
     };
     const data: Omit<WeekEntry, 'id' | 'createdAt'> = cardio
       ? { ...base, sets: [], cardio }

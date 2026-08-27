@@ -110,6 +110,22 @@
   color: var(--text-secondary);
 }
 
+/* The logged note, one step quieter than the sets line above it. Clamped so a
+   chatty note can't bury the other workouts in a 180px-wide day column — the
+   full text is on the title attribute, and always in the edit modal. */
+.day-entry-notes {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: pre-wrap; /* keep the line breaks the user typed */
+  overflow-wrap: anywhere; /* a long unbroken token can't blow out the column */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
 .day-empty {
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -150,6 +166,13 @@
 
 :host(.compact) .day-entry {
   padding: 0.45rem 0.55rem;
+}
+
+/* One line tighter than the page grid: the compact strip is a fixed 15rem tall,
+   so a note has less room to spend before it pushes entries out of view. */
+:host(.compact) .day-entry-notes {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 :host(.compact) .list-loading {

@@ -143,6 +143,26 @@
           </div>
         }
       }
+
+      <!-- Outside the cardio/strength split above: a note is worth keeping for
+           either kind of session. -->
+      <div class="form-group setting-item">
+        <span class="modal-toggle-label">Add a note</span>
+        <button type="button" class="theme-switch" [class.active]="modalHasNotes()"
+          (click)="toggleModalNotes()" [attr.aria-pressed]="modalHasNotes()"
+          aria-label="Toggle a note for this workout">
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+
+      @if (modalHasNotes()) {
+        <div class="form-group">
+          <label class="form-label" for="week-notes">Note</label>
+          <textarea class="form-input form-textarea" id="week-notes" rows="3" maxlength="500"
+            placeholder="How did it go?" [ngModel]="modalNotes()"
+            (ngModelChange)="modalNotes.set($event)" name="notes"></textarea>
+        </div>
+      }
     }
 
     <button type="submit" class="btn btn-primary btn-full mt-2" [disabled]="saving()">

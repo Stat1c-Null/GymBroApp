@@ -76,6 +76,25 @@ by a toggle (`modalTrackTime`) that defaults from
 convert between the `"m:ss"` text the form uses and the stored integer
 seconds.
 
+Workout notes: a second toggle (`modalHasNotes`) reveals a `<textarea>` for a
+free-text note on the session, stored as `WeekEntry.notes`. It looks like the
+time-tracking toggle but differs from it in three ways worth remembering:
+
+- **No global default.** There is no `showNotes` setting — the toggle starts off
+  on every new entry, because a note is occasional rather than a standing
+  preference. On edit it re-derives from the entry (`!!entry.notes`), so opening
+  a noted workout shows the toggle already on with the text seeded.
+- **It applies to cardio too**, so `notes` is built into the shared `base`
+  object in `onSubmit`, not the strength-only branch that carries `trackTime`.
+- **Turning it off saves `''`, not nothing** — see
+  [Database → Workout notes](./database.md#workout-notes) for why omitting the
+  key could never clear a note.
+
+The note renders under the sets summary in `WeekGridComponent`
+(`.day-entry-notes`), clamped to three lines — two in the `compact` friend
+strip — with the full text on the element's `title` and always in the edit
+modal. Because the grid is shared, **an accepted friend sees your notes**.
+
 Duplicate-guard: logging the same workout twice on the same day (outside of
 editing that same entry) is rejected client-side before the write.
 

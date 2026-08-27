@@ -54,6 +54,11 @@ as component-scoped styles:
   once a third caller (the create-workout modal) needed it. `pages/weights/`
   still defines its own — a deliberate variant with a negative `margin-top`,
   and component-scoped styles out-specify the global rule, so it wins there.
+  `.form-textarea` is a **companion, not an alternative**, to `.form-input`:
+  put both on a `<textarea>` so the border/padding/focus chrome stays defined
+  once and only the multi-line bits (`min-height`, `line-height`,
+  `resize: vertical`) live separately. Its one caller today is the workout-note
+  field in the Weeks logging modal.
 - **Page shell**: `.page` (max-width wrapper) / `.page-title` /
   `.page-subtitle` — every routed page (except auth pages, which use
   `AuthLayoutComponent` instead) opens with `<section class="page">`.

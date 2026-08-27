@@ -28,6 +28,9 @@ interface WeeksView {
   onDelete: (entry: WeekEntry) => Promise<void>;
   toggleModalTrackTime: () => void;
   modalTrackTime: () => boolean;
+  toggleModalNotes: () => void;
+  modalHasNotes: () => boolean;
+  modalNotes: WritableSignal<string>;
   onWorkoutCreated: (workout: Workout) => void;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
@@ -289,6 +292,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
       trackTime: false,
       sets: [
         { reps: 10, weight: 60, time: null },
@@ -387,6 +391,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
       trackTime: true,
       sets: [{ reps: 8, weight: 60, time: 90 }],
     });
@@ -407,6 +412,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
       trackTime: false,
       sets: [{ reps: 8, weight: 60, time: null }],
     });
@@ -457,6 +463,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
       trackTime: false,
       sets: [{ reps: 12, weight: 60, time: null }],
     });
@@ -486,6 +493,7 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
       trackTime: true,
       sets: [{ reps: 10, weight: 60, time: 90 }],
     });
@@ -614,6 +622,7 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
         sets: [],
         cardio: { time: 1800, distance: 5, heartRate: 150, elevation: 200 },
       });
@@ -638,6 +647,7 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
         sets: [],
         cardio: {
           time: 1800,
@@ -703,6 +713,7 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
         sets: [],
         cardio: { time: 1800, distance: 6, heartRate: null, elevation: null },
       });
@@ -736,6 +747,7 @@ describe('WeeksComponent', () => {
         workoutId: 'w4',
         workoutName: 'Pull-ups',
         muscleGroup: 'Back',
+        notes: '',
         trackTime: false,
         sets: [
           { reps: 8, weight: 176.4, time: null },
@@ -843,6 +855,90 @@ describe('WeeksComponent', () => {
       fixture.detectChanges(); // the re-seed effect must skip an entry being edited
 
       expect(view.setRows()[0].weight).toBe(190);
+    });
+  });
+
+  describe('workout notes', () => {
+    const notedEntry = (): WeekEntry => ({
+      id: 'noted',
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      notes: 'Felt strong',
+      sets: [{ reps: 10, weight: 60 }],
+    });
+
+    it('saves a trimmed note when the toggle is on', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('  Shoulder tight on the warmup  ');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: 'Shoulder tight on the warmup' })
+      );
+    });
+
+    it('saves no note when the toggle is off, even if text was entered', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.modalNotes.set('typed, then thought better of it');
+      expect(view.modalHasNotes()).toBe(false);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: '' })
+      );
+    });
+
+    it('turns the toggle on and seeds the text when editing an entry that has a note', () => {
+      view.openEditModal(notedEntry());
+
+      expect(view.modalHasNotes()).toBe(true);
+      expect(view.modalNotes()).toBe('Felt strong');
+    });
+
+    it("writes '' when an existing note is toggled off, so updateDoc clears it", async () => {
+      const entry = notedEntry();
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+      view.toggleModalNotes();
+      expect(view.modalHasNotes()).toBe(false);
+
+      await view.onSubmit();
+
+      expect(service.update).toHaveBeenCalledWith(
+        'noted',
+        expect.objectContaining({ notes: '' })
+      );
+    });
+
+    it('saves a note on a cardio session too', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(5);
+      view.toggleModalNotes();
+      view.modalNotes.set('Windy out');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          muscleGroup: CARDIO_GROUP,
+          notes: 'Windy out',
+        })
+      );
     });
   });
 });

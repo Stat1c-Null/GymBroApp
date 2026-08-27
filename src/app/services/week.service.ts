@@ -90,6 +90,12 @@ export interface WeekEntry {
   workoutName: string; // denormalized (survives library rename/delete)
   muscleGroup: MuscleGroup; // denormalized
   trackTime?: boolean; // per-entry time-per-set tracking (older entries lack it)
+  /** Free-text note about how the session went. Always written — as '' when
+   *  there is none — because {@link WeekService.update} uses `updateDoc`, which
+   *  ignores a missing key and so could never clear a note the user removed.
+   *  (Firestore also rejects `undefined` outright.) Entries logged before this
+   *  field simply lack it, which reads the same as ''. */
+  notes?: string;
   sets: WorkoutSet[]; // length = number of sets; [] for cardio entries
   /** Present only when `muscleGroup` is the reserved Cardio category. */
   cardio?: CardioLog;
