@@ -20,13 +20,18 @@ project ID (`gymbroapp-7b680`). There doesn't appear to be a separate
 dev/staging Firebase project — local development reads and writes the same
 Firestore instance as production.
 
-**No Firestore security rules file exists in this repo** (no
-`firebase.json`, no `*.rules` file, no `firestore.indexes.json`). Rules are
-presumably managed directly in the Firebase console, or this repo simply
-doesn't include Firebase project config/deployment tooling. Either way,
-don't assume any server-side access control exists beyond what you can see
-in the console — the client-side `authGuard` only prevents unauthenticated
-*navigation* within this Angular app, it has no bearing on what Firestore
+**Security rules live in [`firestore.rules`](../../firestore.rules)** at the
+repo root, with `firebase.json` and `.firebaserc` beside it. Deploy them with
+`firebase deploy --only firestore:rules`, or paste the file into Firebase
+console → Firestore → Rules → Publish. They used to exist *only* in the console,
+which is how the friend body-weight rule went missing for a whole release — so
+change the file first, and keep it and the deployed rules in step.
+
+There is still no `firestore.indexes.json`: the one composite index this app
+needs is created from the console link that the first collection-group query
+surfaces (see [Cross-week analytics reads](#cross-week-analytics-reads-the-exception)).
+Note also that the client-side `authGuard` only prevents unauthenticated
+*navigation* within this Angular app — it has no bearing on what Firestore
 itself will accept.
 
 ## Document layout
@@ -215,11 +220,13 @@ both set by the service on write (`WeekService.add`/`update`):
   analytics gets a stable timeline value without unwrapping the pending
   `serverTimestamp`.
 
-Two pieces of **Firebase-console** setup this repo can't ship (no rules/index files):
+Two pieces of setup beyond the app code:
 
 1. A **collection-group index** on `entries.uid` — the first query run surfaces a
-   console link that creates the exact index.
-2. A **security rule** permitting the owner-scoped collection-group read, e.g.
+   console link that creates the exact index. This one genuinely is console-only;
+   the repo ships no `firestore.indexes.json`.
+2. A **security rule** permitting the owner-scoped collection-group read. That one
+   *is* in the repo, in [`firestore.rules`](../../firestore.rules):
    `match /{path=**}/entries/{entryId} { allow read: if resource.data.uid == request.auth.uid; }`.
 
 **Back-fill for old entries:** entries logged before this feature lack `uid`/`date`,
@@ -335,8 +342,8 @@ client-side.
 Friends can open each other's **logged week** and **body-weight log** from the
 Friends page. Nothing is copied to do it: `WeekService.entriesFor(uid, weekId)`
 and `WeightService.recentFor(uid)` run the *same* queries the Weeks and Weight
-pages run, just against another uid, and the rules below decide whether it is
-allowed.
+pages run, just against another uid, and [`firestore.rules`](../../firestore.rules)
+decides whether it is allowed.
 
 That makes the security rule the only gate — which is why the client treats a
 failed read as its own state. Both panels distinguish three outcomes, where the
@@ -369,75 +376,26 @@ now discloses body weight, with no per-field opt-out and no indication to the
 owner that someone looked. If that should be optional, the natural home is a flag
 on `userProfiles/{uid}` checked in the rule alongside `isAcceptedFriend`.
 
-### Firebase-console setup this repo can't ship
+### Deploying the rules
 
-Same situation as the collection-group index above — no rules file lives here.
-🟠 These rules are a reviewed starting point, not verified code: check them in the
-Rules Playground before trusting them. The friend-read rule in particular is
-worth exercising from all three sides — owner, accepted friend, and a stranger.
+The ruleset lives at [`firestore.rules`](../../firestore.rules) in the repo root.
+Read it *there* rather than duplicating it here, so the two can't disagree.
+`firebase.json` points at that file and `.firebaserc` pins the project, so
+`firebase deploy --only firestore:rules` is the whole deploy; pasting the file
+into Firebase console → Firestore → Rules → Publish works just as well.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+🟠 The rules are reviewed, not verified. Exercise the friend-read rules in the
+Rules Playground from all three sides — owner, accepted friend, and a stranger —
+before trusting a change to them.
 
-    // Sorted-pair friendship id, matching friendshipId() in services/friends.ts.
-    function pairId(a, b) {
-      return a < b ? a + '_' + b : b + '_' + a;
-    }
+**A new cross-user read means editing that file in the same change.** The friend
+body-weight panel shipped without its `users/{userId}/weights/{entryId}` rule and
+was dead on arrival: friends' weeks loaded, friends' weights were refused. A rule
+that exists only in prose is a rule that isn't deployed.
 
-    // Is the signed-in user an *accepted* friend of otherUid? exists() first:
-    // get() on a missing document yields null, and reading .data off it fails.
-    function isAcceptedFriend(otherUid) {
-      let path = /databases/$(database)/documents/friendships/$(pairId(request.auth.uid, otherUid));
-      return exists(path) && get(path).data.status == 'accepted';
-    }
-
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // A friend's logged week — read-only. Rules are OR-ed with the owner rule
-    // above, so this only ever adds access.
-    match /users/{userId}/weeks/{weekId}/entries/{entryId} {
-      allow read: if request.auth != null && isAcceptedFriend(userId);
-    }
-
-    // A friend's body-weight log — read-only.
-    match /users/{userId}/weights/{entryId} {
-      allow read: if request.auth != null && isAcceptedFriend(userId);
-    }
-
-    match /{path=**}/entries/{entryId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-    }
-
-    match /userProfiles/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    match /friendships/{pairId} {
-      allow read:   if request.auth.uid in resource.data.members;
-      allow create: if request.auth.uid == request.resource.data.requesterUid
-                    && request.auth.uid in request.resource.data.members
-                    && request.resource.data.members.size() == 2
-                    && request.resource.data.status == 'pending';
-      // Only the recipient can accept, and only pending → accepted.
-      allow update: if request.auth.uid in resource.data.members
-                    && request.auth.uid != resource.data.requesterUid
-                    && resource.data.status == 'pending'
-                    && request.resource.data.status == 'accepted'
-                    && request.resource.data.members == resource.data.members;
-      allow delete: if request.auth.uid in resource.data.members;
-    }
-  }
-}
-```
-
-Note what the `update` rule buys beyond "only the recipient accepts": because a
-`setDoc` onto an existing document counts as an update, it also refuses to
-re-open an already-accepted friendship as pending.
+Note what the friendship `update` rule buys beyond "only the recipient accepts":
+because a `setDoc` onto an existing document counts as an update, it also refuses
+to re-open an already-accepted friendship as pending.
 
 `isAcceptedFriend` reads a second document, but only once per *query*, not once
 per entry — the condition depends on the path and `get()`, never on
