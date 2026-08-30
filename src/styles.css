@@ -219,6 +219,34 @@ a:hover {
   color: var(--text-muted);
 }
 
+/* Label for a toggle sitting inside a modal form (".setting-item" card +
+   ".theme-switch" are just below). Shared: the Weeks logging modal and the set
+   builder. Only the label needs styling — .setting-text is scoped to the
+   Settings page. */
+.modal-toggle-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Inline "Create new workout" link under a muscle-group select — a plain text
+   button (no button chrome) that opens the shared create-workout modal.
+   Shared: the Weeks logging modal and the set builder. */
+.create-workout-link {
+  margin-top: 0.4rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  cursor: pointer;
+}
+
+.create-workout-link:hover {
+  text-decoration: underline;
+}
+
 /* ---- Buttons ---- */
 .btn {
   display: inline-flex;

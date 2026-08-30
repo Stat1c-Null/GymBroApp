@@ -1,0 +1,58 @@
+<div class="form-group">
+  <label class="form-label" [attr.for]="idPrefix() + '-count'">Number of sets</label>
+  <input class="form-input" [attr.id]="idPrefix() + '-count'" type="number" min="1" [attr.max]="maxSets"
+    placeholder="0" [ngModel]="rows().length || null" (ngModelChange)="countChange.emit($event)"
+    [name]="idPrefix() + '-count'" />
+</div>
+
+<div class="form-group setting-item">
+  <span class="modal-toggle-label">Track time per set</span>
+  <button type="button" class="theme-switch" [class.active]="trackTime()" (click)="toggleTrackTime()"
+    [attr.aria-pressed]="trackTime()" aria-label="Toggle time tracking for this workout">
+    <span class="switch-knob"></span>
+  </button>
+</div>
+
+@if (bodyWeight()) {
+  @if (template()) {
+    <!-- A plan, not a log: the weight is whatever they weigh on the day they
+         use this set, so nothing is captured or prompted for here. -->
+    <p class="form-hint mb-2">
+      Each set uses your body weight — filled in from your latest weigh-in when you add this set to a day.
+    </p>
+  } @else if (bodyWeightDisplay(); as bodyWeight) {
+    <p class="form-hint mb-2">
+      Weight auto-filled from your latest weigh-in ({{ bodyWeight }} {{ unit() }}).
+    </p>
+  } @else {
+    <!-- Log it right here rather than sending them off to /weights and
+         losing the sets they've already entered. -->
+    <app-body-weight-prompt />
+  }
+}
+
+@if (rows().length) {
+  <div class="set-rows">
+    @for (s of rows(); track $index) {
+      <div class="set-row" [class.with-time]="trackTime()" [class.no-weight]="bodyWeight() && template()">
+        <span class="set-index">Set {{ $index + 1 }}</span>
+        <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
+          [name]="idPrefix() + '-reps-' + $index" aria-label="Reps" />
+        @if (showStaticWeight()) {
+          <!-- Read-only: a body-weight exercise weighs whatever you
+               weigh, so there's nothing per-set to change here. -->
+          <span class="set-weight-static" aria-label="Weight">
+            {{ s.weight != null ? s.weight + ' ' + unit() : '—' }}
+          </span>
+        } @else if (!bodyWeight()) {
+          <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
+            [name]="idPrefix() + '-weight-' + $index" aria-label="Weight" />
+        }
+        @if (trackTime()) {
+          <input class="form-input" type="text" placeholder="m:ss" [(ngModel)]="s.timeText"
+            [name]="idPrefix() + '-time-' + $index" aria-label="Time" />
+        }
+      </div>
+    }
+  </div>
+}

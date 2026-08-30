@@ -11,69 +11,90 @@
   flex-direction: column;
 }
 
-/* Modal: per-set reps + weight rows. (.form-hint is global — see styles.css.)
+/* The modal's per-set rows, its "track time" toggle and its "Create new
+   workout" link all moved out when the set builder needed the same markup:
+   the rows are components/set-rows-editor, and .modal-toggle-label /
+   .create-workout-link are global (styles.css). */
 
-   Label for the in-modal "Track time per set" toggle. The .setting-item card
-   and switch styles are global; only this label needs styling since
-   .setting-text is scoped to the Settings page. */
-.modal-toggle-label {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-/* Inline "Create new workout" link under the muscle-group select — a plain
-   text button (no button chrome) that opens the shared create-workout modal. */
-.create-workout-link {
-  margin-top: 0.4rem;
-  padding: 0;
-  background: none;
-  border: none;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--primary-light);
-  cursor: pointer;
-}
-
-.create-workout-link:hover {
-  text-decoration: underline;
-}
-
-.set-rows {
+/* ---- "+" chooser: log one workout, or drop in a saved set ---- */
+.add-choices {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.set-row {
-  display: grid;
-  grid-template-columns: 3.2rem 1fr 1fr;
-  align-items: center;
   gap: 0.6rem;
 }
 
-/* When the "track time per set" setting is on, fit a 4th (m:ss) column. */
-.set-row.with-time {
-  grid-template-columns: 3.2rem 1fr 1fr 1fr;
+.add-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.set-index {
+.add-choice:hover {
+  background: var(--bg-secondary);
+  border-color: var(--primary);
+}
+
+.add-choice-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.add-choice-sub {
   font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
-.set-row .form-input {
-  padding: 10px 12px;
+/* ---- Saved-set picker ---- */
+.picker-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  margin-bottom: 0.6rem;
+  padding: 0.9rem 1.1rem;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-/* Body-weight exercises take their weight from the latest weigh-in, so the
-   weight column is a read-only value in place of the number input. */
-.set-weight-static {
-  font-size: 0.9rem;
+.picker-row:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--primary);
+}
+
+.picker-row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.picker-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.picker-description {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* The exercises the set will add, so the choice is made on content rather than
+   on remembering what a name meant. */
+.picker-items {
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 /* On small screens the grid stacks (handled inside week-grid), so the page no

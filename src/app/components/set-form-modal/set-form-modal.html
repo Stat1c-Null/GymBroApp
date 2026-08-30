@@ -1,0 +1,55 @@
+<app-modal [open]="open()" [title]="isEditing() ? 'Edit Set' : 'Create Set'" (close)="close.emit()">
+  @if (error()) {
+    <div class="auth-error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+      {{ error() }}
+    </div>
+  }
+
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label class="form-label" for="set-name">Name</label>
+      <input class="form-input" id="set-name" type="text" placeholder="e.g. Push Day"
+        [(ngModel)]="name" name="name" autocomplete="off" required />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="set-description">Description (optional)</label>
+      <textarea class="form-input form-textarea" id="set-description" rows="2" maxlength="300"
+        placeholder="What this set is for" [(ngModel)]="description" name="description"></textarea>
+    </div>
+
+    <div class="set-items">
+      @for (item of items(); track item.key) {
+        <app-set-item-editor [item]="item" [position]="$index + 1" (remove)="removeItem(item)"
+          (createWorkout)="creatingFor.set(item)" />
+      }
+    </div>
+
+    <button type="button" class="btn btn-secondary btn-full mt-2" (click)="addItem()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      Add exercise
+    </button>
+
+    <button type="submit" class="btn btn-primary btn-full mt-2" [disabled]="saving()">
+      @if (saving()) {
+        <span class="spinner"></span>
+        Saving...
+      } @else {
+        {{ isEditing() ? 'Save Changes' : 'Save Set' }}
+      }
+    </button>
+  </form>
+</app-modal>
+
+<!-- "Create new workout", layered over the builder exactly as it layers over
+     the Weeks logging modal. -->
+<app-workout-form-modal [open]="creatingFor() !== null" [presetGroup]="createPresetGroup()"
+  (close)="creatingFor.set(null)" (saved)="onWorkoutCreated($event)" />

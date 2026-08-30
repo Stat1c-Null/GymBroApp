@@ -5,71 +5,60 @@ import { SettingsService } from '../../services/settings.service';
 import {
   WorkoutService,
   Workout,
-  UNASSIGNED_GROUP,
   CARDIO_GROUP,
-  isOrphanGroup,
+  loggableGroups,
+  workoutsInGroup,
 } from '../../services/workout.service';
 import {
   WeightService,
   displayLifted,
-  liftedToCanonical,
   weightIn,
 } from '../../services/weight.service';
-import {
-  displayDistance,
-  distanceToCanonical,
-  displayElevation,
-  elevationToCanonical,
-  formatPace,
-} from '../../services/cardio';
 import { ModalComponent } from '../../components/modal/modal';
 import { WorkoutFormModalComponent } from '../../components/workout-form-modal/workout-form-modal';
+import { SetFormModalComponent } from '../../components/set-form-modal/set-form-modal';
+import { SetRowsEditorComponent } from '../../components/set-rows-editor/set-rows-editor';
+import {
+  CardioFieldsComponent,
+  fromCardioLog,
+  toCardioLog,
+} from '../../components/cardio-fields/cardio-fields';
 import { WeekGridComponent } from '../../components/week-grid/week-grid';
 import { WeekNavComponent } from '../../components/week-nav/week-nav';
-import { BodyWeightPromptComponent } from '../../components/body-weight-prompt/body-weight-prompt';
+import {
+  BLANK_SEED,
+  SetRow,
+  WeightSeed,
+  bodyWeightSeed,
+  canonicalSeed,
+  clampSetCount,
+  everyRowHasReps,
+  growPool,
+  reseedRows,
+  rowsFromLoggedSets,
+  rowsToLoggedSets,
+} from '../../services/set-rows';
+import { entriesFromSet, setItemsFromEntries } from '../../services/apply-set';
+import {
+  SetItem,
+  WorkoutSet,
+  WorkoutSetService,
+} from '../../services/workout-set.service';
 import {
   WeekService,
   WeekEntry,
   CardioLog,
   DAY_LABELS,
   bucketByDay,
-  parseTime,
-  formatTime,
   uniformWeight,
 } from '../../services/week.service';
 
-/** A per-set row in the modal. `timeText` is the raw m:ss text the user edits;
- *  it's parsed to seconds (the stored `WorkoutSet.time`) on submit. */
-interface SetRow {
-  reps: number | null;
-  /** Weight as shown in the user's unit; converted back to canonical lbs on submit. */
-  weight: number | null;
-  /**
-   * What this row was seeded with: the stored (canonical lbs) value, and the
-   * display value derived from it. While `weight` still equals `seededWeight` the
-   * user hasn't touched the field, so `canonicalWeight` is written back verbatim.
-   * Converting again would round-trip through `convertWeight`'s 1-decimal rounding
-   * and silently shift the stored number (135 lbs → 61.2 kg → 134.9 lbs) just
-   * because someone opened the form in kg and edited the reps.
-   */
-  canonicalWeight: number | null;
-  seededWeight: number | null;
-  timeText: string;
-}
-
 /**
- * What a set row's weight field starts out as: the value to store (canonical
- * lbs) paired with the value to show (the user's unit).
- *
- * The two travel together because they aren't always derived from each other. A
- * body-weight seed takes its display value straight off the weigh-in's own `kg`
- * field, so the row reads exactly like the Weight page instead of a converted
- * (and re-rounded) approximation of it.
+ * What the day's "+" button offers. A day can be filled in two quite different
+ * ways now, so the button asks which before opening either form rather than
+ * cramming both into one modal.
  */
-interface WeightSeed {
-  canonical: number | null;
-  display: number | null;
-}
+type AddChoice = 'workout' | 'set';
 
 @Component({
   selector: 'app-weeks',
@@ -78,9 +67,11 @@ interface WeightSeed {
     FormsModule,
     ModalComponent,
     WorkoutFormModalComponent,
+    SetFormModalComponent,
+    SetRowsEditorComponent,
+    CardioFieldsComponent,
     WeekGridComponent,
     WeekNavComponent,
-    BodyWeightPromptComponent,
   ],
   templateUrl: './weeks.html',
   styleUrl: './weeks.css',
@@ -88,23 +79,17 @@ interface WeightSeed {
 export class WeeksComponent {
   private readonly service = inject(WeekService);
   private readonly workoutService = inject(WorkoutService);
+  private readonly setService = inject(WorkoutSetService);
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
   private readonly weightService = inject(WeightService);
 
-  /** Groups offered in the modal's dropdown: the reserved "Cardio" category
-   *  always first, then the user's groups, then "Unassigned" when the
-   *  library holds workouts whose group was deleted (so those stay loggable
-   *  instead of becoming unreachable). */
-  protected readonly muscleGroups = computed(() => {
-    const groups = this.settings.muscleGroups();
-    const known = new Set(groups);
-    const hasUnassigned = (this.workoutService.workouts() ?? []).some((w) =>
-      isOrphanGroup(w.muscleGroup, known)
-    );
-    const list = [CARDIO_GROUP, ...groups];
-    return hasUnassigned ? [...list, UNASSIGNED_GROUP] : list;
-  });
+  /** Groups offered in the modal's dropdown — Cardio first, the user's groups
+   *  next, and Unassigned only when something has landed there. Shared with the
+   *  set builder so the two pickers can't drift. */
+  protected readonly muscleGroups = computed(() =>
+    loggableGroups(this.settings.muscleGroups(), this.workoutService.workouts() ?? [])
+  );
 
   /** Per-workout time tracking for the open modal. Defaults from the global
    *  "Track time per set" setting when adding, or the entry's saved value when
@@ -131,8 +116,9 @@ export class WeeksComponent {
   protected readonly nextWeek = (): void => this.service.nextWeek();
   protected readonly goToThisWeek = (): void => this.service.goToThisWeek();
 
-  /** Entries bucketed by day index — only for the "already logged today?"
-   *  check below; the grid does its own bucketing from the same helper. */
+  /** Entries bucketed by day index — for the "already logged today?" check and
+   *  for capturing a day as a set; the grid does its own bucketing from the
+   *  same helper. */
   private readonly entriesByDay = computed(() => bucketByDay(this.entries()));
 
   // --- Modal + form state ---
@@ -151,18 +137,14 @@ export class WeeksComponent {
    *  rows instead of destroying their data. Only visible rows are saved. */
   private rowPool: SetRow[] = [];
 
-  /** Library workouts in the modal's selected muscle group. When "Unassigned"
-   *  is selected, matches any workout whose group is no longer in the user's
-   *  list (mirrors the Workouts page's grouping). */
-  protected readonly filteredWorkouts = computed(() => {
-    const group = this.modalMuscleGroup();
-    const all = this.workoutService.workouts() ?? [];
-    if (group === UNASSIGNED_GROUP) {
-      const known = new Set(this.settings.muscleGroups());
-      return all.filter((w) => isOrphanGroup(w.muscleGroup, known));
-    }
-    return all.filter((w) => w.muscleGroup === group);
-  });
+  /** Library workouts in the modal's selected muscle group. */
+  protected readonly filteredWorkouts = computed(() =>
+    workoutsInGroup(
+      this.workoutService.workouts() ?? [],
+      this.modalMuscleGroup(),
+      this.settings.muscleGroups()
+    )
+  );
 
   private readonly selectedWorkout = computed(
     () => this.filteredWorkouts().find((w) => w.id === this.modalWorkoutId()) ?? null
@@ -171,11 +153,6 @@ export class WeeksComponent {
   /** Whether the modal's selected group is the reserved Cardio category —
    *  swaps the reps/weight/sets form for the single-session cardio fields. */
   protected readonly isCardio = computed(() => this.modalMuscleGroup() === CARDIO_GROUP);
-  protected readonly distanceUnit = this.settings.distanceUnit;
-  /** Elevation is shown in feet alongside miles, meters alongside km. */
-  protected readonly elevationUnitLabel = computed(() =>
-    this.distanceUnit() === 'mi' ? 'ft' : 'm'
-  );
 
   // --- Body-weight exercises (pull-ups, dips, …) ---
 
@@ -221,14 +198,104 @@ export class WeeksComponent {
   protected readonly cardioHeartRate = signal<number | null>(null);
   protected readonly cardioElevation = signal<number | null>(null);
 
-  /** Read-only pace derived from the entered duration and distance. */
-  protected readonly cardioPace = computed(() => {
-    const seconds = parseTime(this.cardioTimeText());
-    const distance = this.cardioDistance();
-    const unit = this.distanceUnit();
-    const canonicalDistance = distance == null ? null : distanceToCanonical(distance, unit);
-    return formatPace(seconds, canonicalDistance, unit);
-  });
+  // --- The day's "+": log one workout, or drop in a whole saved set ---
+
+  protected readonly showAddChoice = signal(false);
+  protected readonly showSetPicker = signal(false);
+  protected readonly applying = signal(false);
+  protected readonly savedSets = this.setService.sets;
+
+  /** The "+" no longer opens the logging form directly: it asks which of the
+   *  two ways to fill a day the user means. */
+  protected openAddChoice(day: number): void {
+    this.activeDay.set(day);
+    this.showAddChoice.set(true);
+  }
+
+  protected choose(choice: AddChoice): void {
+    this.showAddChoice.set(false);
+    if (choice === 'workout') this.openAddModal(this.activeDay());
+    else this.showSetPicker.set(true);
+  }
+
+  /** The label of the day being added to, for the chooser and picker headings. */
+  protected readonly activeDayLabel = computed(() => DAY_LABELS[this.activeDay()]);
+
+  /**
+   * Drop every exercise in `set` onto the active day, in one atomic write.
+   *
+   * The rules — skip what's already logged, re-weight body-weight exercises
+   * from today's weigh-in, and never write back to the exercise library — all
+   * live in `entriesFromSet`; this only reports the outcome.
+   */
+  protected async applySet(set: WorkoutSet): Promise<void> {
+    const day = this.activeDay();
+    const { entries, skipped } = entriesFromSet(
+      set,
+      day,
+      this.entriesByDay()[day] ?? [],
+      this.latestWeighIn()?.lbs ?? null
+    );
+
+    if (entries.length === 0) {
+      this.toast.show(
+        `Everything in ${set.name} is already logged on ${DAY_LABELS[day]}.`,
+        'error'
+      );
+      return;
+    }
+
+    this.applying.set(true);
+    try {
+      await this.service.addMany(entries);
+      const added = `Added ${entries.length} ${entries.length === 1 ? 'exercise' : 'exercises'} from ${set.name}.`;
+      this.toast.show(
+        skipped.length
+          ? `${added} ${skipped.join(', ')} ${skipped.length === 1 ? 'was' : 'were'} already logged.`
+          : added,
+        'success'
+      );
+      this.showSetPicker.set(false);
+    } catch {
+      this.toast.show('Could not add that set. Please try again.', 'error');
+    } finally {
+      this.applying.set(false);
+    }
+  }
+
+  /** A saved set's exercises, summarised for the picker. */
+  protected itemNames(set: WorkoutSet): string {
+    return set.items.map((item) => item.workoutName).join(' · ');
+  }
+
+  // --- "Save this day as a set" ---
+
+  protected readonly showSaveDay = signal(false);
+  protected readonly saveDayItems = signal<SetItem[]>([]);
+  protected readonly saveDayName = signal('');
+
+  /**
+   * Open the set builder pre-filled with what's already logged on `day`.
+   *
+   * The natural way to build a set is to have just done it, so this captures a
+   * day rather than asking the user to re-enter it. It opens the builder rather
+   * than saving silently: a set wants a name, and this is the moment to look
+   * over what's being kept.
+   */
+  protected onSaveDayAsSet(day: number): void {
+    const entries = this.entriesByDay()[day] ?? [];
+    if (entries.length === 0) return;
+    const bodyWeightIds = new Set(
+      (this.workoutService.workouts() ?? [])
+        .filter((w) => w.bodyWeight && w.id)
+        .map((w) => w.id!)
+    );
+    this.saveDayItems.set(setItemsFromEntries(entries, bodyWeightIds));
+    this.saveDayName.set(`${DAY_LABELS[day]} session`);
+    this.showSaveDay.set(true);
+  }
+
+  // --- Add / edit one logged workout ---
 
   protected openAddModal(day: number): void {
     this.editingId.set(null);
@@ -259,9 +326,7 @@ export class WeeksComponent {
       this.modalTrackTime.set(
         entry.trackTime ?? entry.sets.some((s) => s.time != null)
       );
-      this.rowPool = entry.sets.map((s) =>
-        this.seedRow(this.canonicalSeed(s.weight), s.reps, formatTime(s.time ?? null))
-      );
+      this.rowPool = rowsFromLoggedSets(entry.sets, this.settings.unit());
       this.setRows.set(this.rowPool.slice());
       this.resetCardioFields();
     }
@@ -332,11 +397,12 @@ export class WeeksComponent {
   /** Grow/shrink the visible per-set rows. Shrinking only hides rows (they
    *  stay in the pool with their data); growing brings them back. */
   protected onSetsCountChange(value: number | null): void {
-    const count = Math.max(0, Math.min(Math.floor(value ?? 0), 20));
-    const seed = this.weightSeedFor(this.selectedWorkout());
-    while (this.rowPool.length < count) {
-      this.rowPool.push(this.seedRow(seed));
-    }
+    const count = clampSetCount(value);
+    this.rowPool = growPool(
+      this.rowPool,
+      count,
+      this.weightSeedFor(this.selectedWorkout())
+    );
     this.setRows.set(this.rowPool.slice(0, count));
   }
 
@@ -362,7 +428,7 @@ export class WeeksComponent {
         this.error.set('Add at least one set.');
         return;
       }
-      if (sets.some((s) => s.reps == null || s.reps <= 0)) {
+      if (!everyRowHasReps(sets)) {
         this.error.set('Enter the reps for every set.');
         return;
       }
@@ -397,11 +463,7 @@ export class WeeksComponent {
       : {
           ...base,
           trackTime,
-          sets: this.setRows().map((s) => ({
-            reps: s.reps,
-            weight: this.toCanonicalWeight(s),
-            time: trackTime ? parseTime(s.timeText) : null,
-          })),
+          sets: rowsToLoggedSets(this.setRows(), this.settings.unit(), trackTime),
         };
     const id = this.editingId();
 
@@ -427,9 +489,12 @@ export class WeeksComponent {
   /** After a log save, if every set shares one weight and it differs from the
    *  workout's saved usual weight, push it back into the library so the next
    *  time this workout is logged, the form seeds from the latest value.
-   *  Blank (no-weight) sets are ignored — see {@link uniformWeight}. Returns
+   *  Blank (no-weight) sets are ignored — see `uniformWeight`. Returns
    *  the toast message to show (the base message, with a suffix if the usual
-   *  weight changed). */
+   *  weight changed).
+   *
+   *  Note this runs only for a hand-logged entry. Applying a saved set
+   *  deliberately skips it — see `entriesFromSet`. */
   private async syncUsualWeight(
     workout: Workout,
     sets: { weight: number | null }[],
@@ -477,86 +542,44 @@ export class WeeksComponent {
    *  exists — the modal swaps in `BodyWeightPromptComponent` to log one, and
    *  the effect above fills the rows in as soon as it lands. */
   private weightSeedFor(workout: Workout | null): WeightSeed {
-    if (workout?.bodyWeight) {
-      const latest = this.latestWeighIn();
-      return latest
-        ? { canonical: latest.lbs, display: weightIn(latest, this.settings.unit()) }
-        : { canonical: null, display: null };
-    }
-    return this.canonicalSeed(workout?.usualWeight ?? null);
-  }
-
-  /** A seed for a stored (canonical lbs) weight, shown in the user's unit. */
-  private canonicalSeed(canonical: number | null): WeightSeed {
-    return { canonical, display: displayLifted(canonical, this.settings.unit()) };
-  }
-
-  /** A set row seeded from a {@link WeightSeed}. See {@link SetRow}. */
-  private seedRow(
-    seed: WeightSeed,
-    reps: number | null = null,
-    timeText = ''
-  ): SetRow {
-    return {
-      reps,
-      weight: seed.display,
-      canonicalWeight: seed.canonical,
-      seededWeight: seed.display,
-      timeText,
-    };
+    if (!workout) return BLANK_SEED;
+    return workout.bodyWeight
+      ? bodyWeightSeed(this.latestWeighIn(), this.settings.unit())
+      : canonicalSeed(workout.usualWeight, this.settings.unit());
   }
 
   /** Re-seed every pooled row's weight (e.g. the selected workout changed),
    *  leaving reps and time intact. */
   private reseedWeights(seed: WeightSeed): void {
-    this.rowPool = this.rowPool.map((r) => ({
-      ...r,
-      weight: seed.display,
-      canonicalWeight: seed.canonical,
-      seededWeight: seed.display,
-    }));
+    this.rowPool = reseedRows(this.rowPool, seed);
     this.setRows.set(this.rowPool.slice(0, this.setRows().length));
   }
 
-  /** The value to store for a row — see {@link SetRow.canonicalWeight}. */
-  private toCanonicalWeight(row: SetRow): number | null {
-    if (row.weight == null) return null;
-    if (row.weight === row.seededWeight) return row.canonicalWeight;
-    return liftedToCanonical(row.weight, this.settings.unit());
-  }
-
   private resetCardioFields(): void {
-    this.cardioTimeText.set('');
-    this.cardioDistance.set(null);
-    this.cardioHeartRate.set(null);
-    this.cardioElevation.set(null);
+    this.seedCardioFields(null);
   }
 
-  /** Seed the cardio fields from a stored (canonical) log when editing. */
+  /** Seed the cardio fields from a stored (canonical) log — or clear them,
+   *  which is the same operation with nothing to seed from. */
   private seedCardioFields(cardio: CardioLog | null): void {
-    const unit = this.distanceUnit();
-    this.cardioTimeText.set(formatTime(cardio?.time ?? null));
-    this.cardioDistance.set(displayDistance(cardio?.distance ?? null, unit));
-    this.cardioHeartRate.set(cardio?.heartRate ?? null);
-    this.cardioElevation.set(displayElevation(cardio?.elevation ?? null, unit));
+    const fields = fromCardioLog(cardio, this.settings.distanceUnit());
+    this.cardioTimeText.set(fields.timeText);
+    this.cardioDistance.set(fields.distance);
+    this.cardioHeartRate.set(fields.heartRate);
+    this.cardioElevation.set(fields.elevation);
   }
 
   /** The cardio log to save from the current form fields, or `null` if the
    *  required duration/distance aren't both present (a positive distance). */
   private buildCardioLog(): CardioLog | null {
-    const unit = this.distanceUnit();
-    const time = parseTime(this.cardioTimeText());
-    const distance = this.cardioDistance();
-    const canonicalDistance = distance == null ? null : distanceToCanonical(distance, unit);
-    if (time == null || canonicalDistance == null || canonicalDistance <= 0) {
-      return null;
-    }
-    const elevation = this.cardioElevation();
-    return {
-      time,
-      distance: canonicalDistance,
-      heartRate: this.cardioHeartRate(),
-      elevation: elevation == null ? null : elevationToCanonical(elevation, unit),
-    };
+    return toCardioLog(
+      {
+        timeText: this.cardioTimeText(),
+        distance: this.cardioDistance(),
+        heartRate: this.cardioHeartRate(),
+        elevation: this.cardioElevation(),
+      },
+      this.settings.distanceUnit()
+    );
   }
 }

@@ -7,7 +7,8 @@ the same thing.
 
 GymBroApp is a personal workout tracker: users log weekly workout sessions
 (sets/reps/weight/time), maintain a reusable exercise library grouped by
-muscle group, track body weight over time (with a goal-driven burndown chart on
+muscle group, save recurring sessions as reusable **sets** they can drop onto a
+day in one go, track body weight over time (with a goal-driven burndown chart on
 the Analytics page), customize a few preferences, and add each other as friends
 to see one another's logged weeks.
 Auth and data are backed by Firebase (Auth + Firestore); there is no custom
@@ -22,8 +23,8 @@ backend server.
   denormalization decisions, what's *not* configured (e.g. no rules file in
   this repo).
 - [Features](./features.md) — one section per feature (auth, dashboard,
-  weeks, workouts, weights, settings, analytics, friends, changelog, theming,
-  toasts),
+  weeks, workouts, workout sets, weights, settings, analytics, friends,
+  changelog, theming, toasts),
   what it does, and how it interacts with other features.
 - [Components & Services](./components-and-services.md) — catalog of every
   reusable component and injectable service: purpose, inputs/outputs, key

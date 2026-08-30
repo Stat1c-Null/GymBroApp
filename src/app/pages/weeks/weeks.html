@@ -11,8 +11,48 @@
 
   <!-- 7-day grid (shared with the friend-week view, editable here) -->
   <app-week-grid [entries]="entries()" [weekStart]="weekStart()" [today]="today()" [editable]="true"
-    (add)="openAddModal($event)" (edit)="openEditModal($event)" (remove)="onDelete($event)" />
+    (add)="openAddChoice($event)" (edit)="openEditModal($event)" (remove)="onDelete($event)"
+    (saveAsSet)="onSaveDayAsSet($event)" />
 </section>
+
+<!-- What does "+" mean today: one workout, or a whole saved set? -->
+<app-modal [open]="showAddChoice()" [title]="'Add to ' + activeDayLabel()" (close)="showAddChoice.set(false)">
+  <div class="add-choices">
+    <button type="button" class="add-choice" (click)="choose('workout')">
+      <span class="add-choice-title">Log a workout</span>
+      <span class="add-choice-sub">Pick one exercise and enter its sets.</span>
+    </button>
+    <button type="button" class="add-choice" (click)="choose('set')">
+      <span class="add-choice-title">Add a set</span>
+      <span class="add-choice-sub">Drop in a saved group of exercises at once.</span>
+    </button>
+  </div>
+</app-modal>
+
+<!-- Pick a saved set to drop onto the active day -->
+<app-modal [open]="showSetPicker()" [title]="'Add a set to ' + activeDayLabel()"
+  (close)="showSetPicker.set(false)">
+  @if (savedSets(); as list) {
+    @for (s of list; track s.id) {
+      <button type="button" class="picker-row" (click)="applySet(s)" [disabled]="applying()">
+        <span class="picker-name">{{ s.name }}</span>
+        @if (s.description) {
+          <span class="picker-description">{{ s.description }}</span>
+        }
+        <span class="picker-items">{{ itemNames(s) }}</span>
+      </button>
+    } @empty {
+      <p class="form-hint">
+        No sets yet. Build one on the Sets page, or log a day here and use “Save as set” on its
+        column header.
+      </p>
+    }
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
+</app-modal>
 
 <!-- Add / Edit Workout Modal -->
 <app-modal [open]="showModal()" [title]="editingId() ? 'Edit Workout' : 'Add Workout'" (close)="closeModal()">
@@ -60,88 +100,16 @@
 
     @if (modalWorkoutId()) {
       @if (isCardio()) {
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="cardio-time">Duration (m:ss)</label>
-            <input class="form-input" id="cardio-time" type="text" placeholder="m:ss"
-              [ngModel]="cardioTimeText()" (ngModelChange)="cardioTimeText.set($event)" name="cardioTime" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="cardio-distance">Distance ({{ distanceUnit() }})</label>
-            <input class="form-input" id="cardio-distance" type="number" min="0" step="0.01" placeholder="0"
-              [ngModel]="cardioDistance()" (ngModelChange)="cardioDistance.set($event)" name="cardioDistance" />
-          </div>
-        </div>
-
-        @if (cardioPace(); as pace) {
-          <p class="form-hint">Pace: {{ pace }}</p>
-        }
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="cardio-heart-rate">Avg. heart rate (optional)</label>
-            <input class="form-input" id="cardio-heart-rate" type="number" min="0" placeholder="bpm"
-              [ngModel]="cardioHeartRate()" (ngModelChange)="cardioHeartRate.set($event)" name="cardioHeartRate" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="cardio-elevation">Elevation gain (optional, {{ elevationUnitLabel() }})</label>
-            <input class="form-input" id="cardio-elevation" type="number" min="0" placeholder="0"
-              [ngModel]="cardioElevation()" (ngModelChange)="cardioElevation.set($event)" name="cardioElevation" />
-          </div>
-        </div>
+        <app-cardio-fields idPrefix="week-cardio"
+          [timeText]="cardioTimeText()" (timeTextChange)="cardioTimeText.set($event)"
+          [distance]="cardioDistance()" (distanceChange)="cardioDistance.set($event)"
+          [heartRate]="cardioHeartRate()" (heartRateChange)="cardioHeartRate.set($event)"
+          [elevation]="cardioElevation()" (elevationChange)="cardioElevation.set($event)" />
       } @else {
-        <div class="form-group">
-          <label class="form-label" for="week-sets">Number of sets</label>
-          <input class="form-input" id="week-sets" type="number" min="1" max="20" placeholder="0"
-            [ngModel]="setRows().length || null" (ngModelChange)="onSetsCountChange($event)" name="setsCount" />
-        </div>
-
-        <div class="form-group setting-item">
-          <span class="modal-toggle-label">Track time per set</span>
-          <button type="button" class="theme-switch" [class.active]="modalTrackTime()"
-            (click)="toggleModalTrackTime()" [attr.aria-pressed]="modalTrackTime()"
-            aria-label="Toggle time tracking for this workout">
-            <span class="switch-knob"></span>
-          </button>
-        </div>
-
-        @if (isBodyWeight()) {
-          @if (bodyWeightDisplay(); as bodyWeight) {
-            <p class="form-hint mb-2">
-              Weight auto-filled from your latest weigh-in ({{ bodyWeight }} {{ unit() }}).
-            </p>
-          } @else {
-            <!-- Log it right here rather than sending them off to /weights and
-                 losing the sets they've already entered. -->
-            <app-body-weight-prompt />
-          }
-        }
-
-        @if (setRows().length) {
-          <div class="set-rows">
-            @for (s of setRows(); track $index) {
-              <div class="set-row" [class.with-time]="modalTrackTime()">
-                <span class="set-index">Set {{ $index + 1 }}</span>
-                <input class="form-input" type="number" min="1" placeholder="reps" [(ngModel)]="s.reps"
-                  [name]="'reps' + $index" aria-label="Reps" />
-                @if (isBodyWeight()) {
-                  <!-- Read-only: a body-weight exercise weighs whatever you
-                       weigh, so there's nothing per-set to change here. -->
-                  <span class="set-weight-static" aria-label="Weight">
-                    {{ s.weight != null ? s.weight + ' ' + unit() : '—' }}
-                  </span>
-                } @else {
-                  <input class="form-input" type="number" min="0" placeholder="{{ unit() }}" [(ngModel)]="s.weight"
-                    [name]="'weight' + $index" aria-label="Weight" />
-                }
-                @if (modalTrackTime()) {
-                  <input class="form-input" type="text" placeholder="m:ss"
-                    [(ngModel)]="s.timeText" [name]="'time' + $index" aria-label="Time" />
-                }
-              </div>
-            }
-          </div>
-        }
+        <app-set-rows-editor idPrefix="week" [rows]="setRows()"
+          [trackTime]="modalTrackTime()" (trackTimeChange)="modalTrackTime.set($event)"
+          [bodyWeight]="isBodyWeight()" [bodyWeightDisplay]="bodyWeightDisplay()"
+          (countChange)="onSetsCountChange($event)" />
       }
 
       <!-- Outside the cardio/strength split above: a note is worth keeping for
@@ -179,3 +147,7 @@
 <!-- "Create new workout" modal, layered over the add-to-week modal -->
 <app-workout-form-modal [open]="showCreateWorkout()" [presetGroup]="modalMuscleGroup()"
   (close)="showCreateWorkout.set(false)" (saved)="onWorkoutCreated($event)" />
+
+<!-- "Save this day as a set": the builder, opened pre-filled from a logged day -->
+<app-set-form-modal [open]="showSaveDay()" [presetItems]="saveDayItems()" [presetName]="saveDayName()"
+  (close)="showSaveDay.set(false)" />

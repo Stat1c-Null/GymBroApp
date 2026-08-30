@@ -66,6 +66,25 @@
   height: 30px;
 }
 
+.day-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+/* "Save this day as a set" — secondary to the "+" beside it, so it sits back
+   until the column is hovered rather than competing for attention. */
+.day-save {
+  width: 28px;
+  height: 28px;
+  opacity: 0.55;
+}
+
+.day-column:hover .day-save,
+.day-save:focus-visible {
+  opacity: 1;
+}
+
 .day-entries {
   flex: 1;
   min-height: 0;

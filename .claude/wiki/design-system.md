@@ -57,8 +57,14 @@ as component-scoped styles:
   `.form-textarea` is a **companion, not an alternative**, to `.form-input`:
   put both on a `<textarea>` so the border/padding/focus chrome stays defined
   once and only the multi-line bits (`min-height`, `line-height`,
-  `resize: vertical`) live separately. Its one caller today is the workout-note
-  field in the Weeks logging modal.
+  `resize: vertical`) live separately. Callers: the workout-note field in the
+  Weeks logging modal, and the description/note fields in the set builder.
+- **In-modal form extras**: `.modal-toggle-label` (the label beside a
+  `.theme-switch` toggle inside a modal form) and `.create-workout-link` (the
+  plain-text "+ Create new workout" button under a muscle-group select). Both
+  started scoped to `pages/weeks/`; they went global when the set builder
+  needed the same two pieces — the same promotion `.form-hint` got, for the
+  same reason.
 - **Page shell**: `.page` (max-width wrapper) / `.page-title` /
   `.page-subtitle` — every routed page (except auth pages, which use
   `AuthLayoutComponent` instead) opens with `<section class="page">`.

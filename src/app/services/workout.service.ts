@@ -72,6 +72,45 @@ export interface Workout {
   createdAt?: unknown; // Firestore serverTimestamp
 }
 
+/**
+ * The muscle groups a form should offer when picking an exercise to log or to
+ * plan: the reserved {@link CARDIO_GROUP} always first, then the user's own
+ * groups, then {@link UNASSIGNED_GROUP} — but only when the library actually
+ * holds an orphan, so the bucket doesn't advertise itself to users who have
+ * never deleted a group.
+ *
+ * Shared by the Weeks logging modal and the set builder. Note this is *not*
+ * the same list `WorkoutFormModalComponent` offers: creating a workout can
+ * always target Unassigned, whereas choosing one only reaches it if something
+ * is in there.
+ */
+export function loggableGroups(
+  groups: readonly string[],
+  workouts: readonly Workout[]
+): string[] {
+  const known = new Set(groups);
+  const list = [CARDIO_GROUP, ...groups];
+  const hasOrphans = workouts.some((w) => isOrphanGroup(w.muscleGroup, known));
+  return hasOrphans ? [...list, UNASSIGNED_GROUP] : list;
+}
+
+/**
+ * The exercises in `group`, as the pickers filter them. Selecting the reserved
+ * {@link UNASSIGNED_GROUP} matches anything whose group has left the user's
+ * list, mirroring how the Workouts page buckets them.
+ */
+export function workoutsInGroup(
+  workouts: readonly Workout[],
+  group: string,
+  knownGroups: readonly string[]
+): Workout[] {
+  if (group === UNASSIGNED_GROUP) {
+    const known = new Set(knownGroups);
+    return workouts.filter((w) => isOrphanGroup(w.muscleGroup, known));
+  }
+  return workouts.filter((w) => w.muscleGroup === group);
+}
+
 @Injectable({ providedIn: 'root' })
 export class WorkoutService {
   private readonly firestore = inject(Firestore);

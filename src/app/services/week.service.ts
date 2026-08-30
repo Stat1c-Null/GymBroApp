@@ -11,6 +11,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  writeBatch,
+  Timestamp,
 } from '@angular/fire/firestore';
 import { Observable, combineLatest, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
@@ -27,7 +29,16 @@ export const DAY_LABELS = [
   'Sun',
 ] as const;
 
-export interface WorkoutSet {
+/**
+ * One set within a logged exercise — the gym sense of "set": a number of reps
+ * at a weight, optionally timed.
+ *
+ * Named `LoggedSet` rather than `WorkoutSet` because that name belongs to the
+ * *other* sense of the word: a saved, reusable bundle of exercises
+ * (`workout-set.service.ts`). Two concepts, one English word — the code keeps
+ * them apart so a reader never has to guess which one a `sets` field holds.
+ */
+export interface LoggedSet {
   reps: number | null;
   weight: number | null;
   time?: number | null; // duration in seconds (optional; older entries lack it)
@@ -96,7 +107,7 @@ export interface WeekEntry {
    *  (Firestore also rejects `undefined` outright.) Entries logged before this
    *  field simply lack it, which reads the same as ''. */
   notes?: string;
-  sets: WorkoutSet[]; // length = number of sets; [] for cardio entries
+  sets: LoggedSet[]; // length = number of sets; [] for cardio entries
   /** Present only when `muscleGroup` is the reserved Cardio category. */
   cardio?: CardioLog;
   createdAt?: unknown; // Firestore serverTimestamp → newest on top
@@ -278,6 +289,41 @@ export class WeekService {
       date: entryDate(this.weekId(), data.day),
       createdAt: serverTimestamp(),
     });
+  }
+
+  /**
+   * Log several entries on one day at once — how a saved set is applied (see
+   * `apply-set.ts`).
+   *
+   * **One batch, one commit**, so a set can never land half-applied: a network
+   * failure part-way through a loop of `add()` calls would leave the user
+   * staring at three of their five exercises with no obvious way to finish.
+   *
+   * 🟠 `createdAt` is a **client** timestamp here, not `serverTimestamp()` as
+   * everywhere else, and deliberately: every write in a batch commits at the
+   * same instant, so server timestamps would tie and the day column
+   * (`orderBy('createdAt','desc')`) would fall back to random document ids —
+   * scrambling the order of the very routine the user saved. Counting *down*
+   * from now gives `entries[0]` the newest stamp, so the set renders top-to-
+   * bottom in the order it was written. The cost is that a badly-skewed client
+   * clock misorders these against individually-logged entries in the same
+   * column. That is display order only; nothing reads `createdAt` for meaning.
+   */
+  async addMany(data: Omit<WeekEntry, 'id' | 'createdAt'>[]): Promise<void> {
+    if (data.length === 0) return;
+    const uid = this.requireUid();
+    const weekId = this.weekId();
+    const batch = writeBatch(this.firestore);
+    const now = Date.now();
+    data.forEach((entry, index) => {
+      batch.set(doc(this.weekEntries(uid, weekId)), {
+        ...entry,
+        uid,
+        date: entryDate(weekId, entry.day),
+        createdAt: Timestamp.fromMillis(now - index),
+      });
+    });
+    await batch.commit();
   }
 
   async update(

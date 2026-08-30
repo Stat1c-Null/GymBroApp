@@ -1,0 +1,57 @@
+/* Per-set reps + weight rows. Moved here from weeks.css when the set builder
+   needed the same markup; .form-group / .form-hint / .setting-item /
+   .theme-switch / .modal-toggle-label are all global (styles.css). */
+
+/* The component is a fragment of someone else's form, not a box of its own —
+   stay out of the parent's layout entirely so the fields flow exactly as they
+   did when this markup was inline. */
+:host {
+  display: contents;
+}
+
+.set-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* When "track time per set" is on, fit a 4th (m:ss) column. */
+.set-row.with-time {
+  grid-template-columns: 3.2rem 1fr 1fr 1fr;
+}
+
+/* A body-weight exercise inside a *set* has no weight column at all — the
+   weight only exists once the set is applied to a day. */
+.set-row.no-weight {
+  grid-template-columns: 3.2rem 1fr;
+}
+
+.set-row.no-weight.with-time {
+  grid-template-columns: 3.2rem 1fr 1fr;
+}
+
+.set-index {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.set-row .form-input {
+  padding: 10px 12px;
+}
+
+/* Body-weight exercises take their weight from the latest weigh-in, so the
+   weight column is a read-only value in place of the number input. */
+.set-weight-static {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

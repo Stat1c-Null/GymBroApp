@@ -50,7 +50,13 @@ The core logging flow. A 7-day grid (Mon–Sun, `DAY_LABELS`) for the
 currently-viewed week, with Prev/Next/"This week" navigation
 (`WeekService.previousWeek/nextWeek/goToThisWeek`, backed by
 `currentWeekStart`). Each day column lists that day's `WeekEntry` items and
-has an "add" button opening a modal to log a new one.
+has an "add" button.
+
+That button no longer opens the logging form directly: a day can be filled two
+ways now, so it asks which first — **log one workout**, or **drop in a saved
+set**. See [Workout Sets](#workout-sets-reusable-groups-of-exercises). A day
+that already has something logged also carries a small "save as set" button in
+its column header, which captures it as a reusable set.
 
 The grid and the nav are **shared components**, not page markup: the Friends
 page renders a friend's week from the same two, read-only and compact. So the
@@ -75,6 +81,16 @@ by a toggle (`modalTrackTime`) that defaults from
 (`WeekEntry.trackTime`). `parseTime`/`formatTime` (in `week.service.ts`)
 convert between the `"m:ss"` text the form uses and the stored integer
 seconds.
+
+Those per-set rows and the cardio fields are **shared components** —
+`SetRowsEditorComponent` and `CardioFieldsComponent` — because the set builder
+needs the identical form. Their arithmetic is pure and lives outside both:
+`services/set-rows.ts` (seeding rows, growing the pool, and the
+canonical-weight round-trip guard) and the `toCardioLog`/`fromCardioLog` pair
+beside the cardio component. `weeks.ts` kept the orchestration — which day,
+the duplicate guard, the submit, the usual-weight write-back — and delegates
+the rest. See
+[Workout Sets → Sharing the form](#sharing-the-form-with-the-weeks-page).
 
 Workout notes: a second toggle (`modalHasNotes`) reveals a `<textarea>` for a
 free-text note on the session, stored as `WeekEntry.notes`. It looks like the
@@ -171,6 +187,114 @@ be logged without leaving the form — the exercise is useless until one exists.
 See
 [Database → Body-weight exercises](./database.md#body-weight-exercises) for the
 stored shape, and Weeks above for what logging one does.
+
+## Workout Sets (reusable groups of exercises)
+
+**Files**: `services/workout-set.service.ts`, `services/apply-set.ts`
+(+ `.spec.ts`), `services/set-rows.ts` (+ `.spec.ts`), `pages/sets/`,
+`components/set-form-modal/` (`set-form-modal.ts`, `set-item-editor.ts`,
+`builder-item.ts` + `.spec.ts`), `components/set-rows-editor/`,
+`components/cardio-fields/`.
+
+For anyone who does the same session every week and would rather not re-enter
+it. A **set** is a named, ordered group of exercises with the reps, weights and
+notes they're meant to be done at; applying one to a day creates a normal
+`WeekEntry` per exercise, each editable afterwards like any other.
+
+🟠 **"Set" is overloaded, and the code disambiguates.** The gym sense — reps at
+a weight — is `LoggedSet`; it was renamed from `WorkoutSet` when this feature
+landed so that name could mean the bundle. See
+[Database → workoutSets](./database.md#usersuidworkoutsetssetid).
+
+### The `/sets` page
+
+A thin list, modelled on the Workouts page: one card per set with its name,
+description, exercise count, and every exercise summarised — using
+`entrySummary()`, the *same* pure function the week grid uses, so a set reads
+exactly like the day it will become. (That function's parameter was widened to
+a structural `SummarizableExercise` for this; `WeekEntry` and `SetItem` both
+satisfy it.) Contents are always visible rather than behind an accordion — the
+whole point of a set is what's in it, and there are only ever a handful.
+
+Create/edit is entirely owned by **`SetFormModalComponent`**, driven by inputs
+(`editingSet`, `presetItems`, `presetName`) and emitting `saved`/`close` — the
+same shape `WorkoutFormModalComponent` has, and for the same reason: the Weeks
+page opens it too.
+
+### The builder
+
+Name, optional description, then one `SetItemEditorComponent` block per
+exercise, each with "+ Add exercise" / remove. A block is the Weeks logging
+form minus the day: muscle group → workout → set count → per-set rows (or the
+cardio fields) → optional note. It even carries the same "+ Create new
+workout" link, layering `WorkoutFormModalComponent` over the builder exactly
+as it layers over the logging modal.
+
+Validation and conversion happen together in `toSetItem` (`builder-item.ts`,
+pure and unit-tested), which returns either the storable `SetItem` or the first
+thing wrong with it — named, so the user knows which block to fix ("Enter the
+reps for every set of Bench Press.").
+
+`BuilderItem`'s fields are **signals**, unlike the Weeks modal's plain
+`SetRow`s. The builder and each child editor share one object by reference, and
+a plain property mutation would tell neither of them anything. Row *fields*
+stay plain for the same reason they always were: `[(ngModel)]` writes what the
+user already sees.
+
+### Sharing the form with the Weeks page
+
+This is the second piece of business logic genuinely shared between two pages
+(after `WorkoutFormModalComponent`). The split:
+
+| Piece | Kind | Why there |
+|---|---|---|
+| `services/set-rows.ts` | pure functions | The arithmetic, including the **canonical-weight round-trip guard** — the 135 lbs → 61.2 kg → 134.9 lbs trap. Worth testing directly, and the thing you'd otherwise get subtly wrong twice. |
+| `SetRowsEditorComponent` | presentational | The set-count field, the time toggle, and the rows. Renders `SetRow` objects the caller owns and lets `ngModel` mutate them in place. |
+| `CardioFieldsComponent` | presentational | Duration/distance/HR/elevation + the read-only computed pace, with `toCardioLog`/`fromCardioLog` converting at the boundary. |
+
+One input separates the two callers: `template`. In template mode a body-weight
+exercise shows **no weight at all** and no "log a weigh-in" prompt — a set is
+reused week after week, so the weight is filled at apply time instead. Both
+components also take an `idPrefix`, because the builder renders several inside
+one `<form>` where duplicate control names would collide.
+
+### Applying a set to a day
+
+The `+` on a day column opens a chooser ("Log a workout" / "Add a set"); the
+second opens a picker listing saved sets with their exercises. Choosing one
+writes every exercise in a single batch (`WeekService.addMany`).
+
+The rules live in `services/apply-set.ts` — pure, no Angular, no Firestore, in
+the spirit of `entry-summary.ts`. Three of them, each with an
+obvious-but-wrong alternative, are spelled out in
+[Database → Applying a set to a day](./database.md#applying-a-set-to-a-day):
+a collision **skips** that exercise rather than failing the set, body-weight
+exercises take **today's** weight, and **nothing** is written back to the
+exercise library. The toast reports the outcome, naming what was skipped.
+
+### Save this day as a set
+
+The inverse, and in practice how most sets get built: the quickest moment to
+write a routine down is just after doing it. A "save as set" button on any
+non-empty day column captures its entries (`setItemsFromEntries`) and opens the
+builder **pre-filled** rather than saving silently — a set wants a name, and
+this is the moment to look over what's being kept. The round trip is stable:
+capture preserves the column's order, and `addMany` restores it.
+
+### Interaction with the rest of the app
+
+- **No security-rules change.** The collection sits under `users/{uid}`, which
+  the existing owner rule already covers. Nothing is shared across a
+  friendship.
+- **Analytics needs nothing.** Applied entries are ordinary `WeekEntry` docs
+  with `uid`/`date` stamped by `WeekService.addMany`, so the collection-group
+  query sees them like any other.
+- **`loggableGroups()`/`workoutsInGroup()`** moved into `workout.service.ts`
+  when the builder needed the Weeks modal's group list, rather than becoming a
+  third copy.
+- The Weeks page gained the chooser, the picker and the capture flow;
+  `WeekGridComponent` gained one output (`saveAsSet`) and stays presentational,
+  so the friend-week view is unaffected.
 
 ## Weights (body weight tracking)
 

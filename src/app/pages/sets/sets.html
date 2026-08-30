@@ -1,0 +1,79 @@
+<section class="page">
+  <!-- Header -->
+  <div class="list-header">
+    <div>
+      <h1 class="page-title">Sets</h1>
+      <p class="page-subtitle">Reusable groups of exercises — add a whole session to a day in one go.</p>
+    </div>
+    <button class="btn btn-primary" id="add-set-btn" (click)="openModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      Create Set
+    </button>
+  </div>
+
+  @if (sets(); as list) {
+    <div class="set-list">
+      @for (s of list; track s.id) {
+        <div class="set-card glass-card">
+          <div class="set-card-head">
+            <div class="list-info">
+              <span class="list-name">{{ s.name }}</span>
+              @if (s.description) {
+                <p class="set-description">{{ s.description }}</p>
+              }
+            </div>
+            <div class="list-meta">
+              <div class="list-stats">
+                <span><strong>{{ s.items.length }}</strong> {{ s.items.length === 1 ? 'exercise' : 'exercises' }}</span>
+              </div>
+              <div class="list-actions">
+                <button class="list-action" (click)="openModal(s)" aria-label="Edit set">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </button>
+                <button class="list-action list-delete" (click)="onDelete(s)" aria-label="Delete set">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- What's in it. The same summary line the week grid uses, so a set
+               reads exactly like the day it will become. -->
+          <ul class="set-items">
+            @for (item of s.items; track $index) {
+              <li class="set-item">
+                <span class="set-item-name">{{ item.workoutName }}</span>
+                <span class="set-item-summary">{{ summaryOf(item) }}</span>
+              </li>
+            } @empty {
+              <li class="text-muted">No exercises in this set.</li>
+            }
+          </ul>
+        </div>
+      } @empty {
+        <div class="list-empty glass-card">
+          <p>
+            No sets yet — build one from the exercises you already have, then add it to any day
+            from the Weeks page.
+          </p>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
+</section>
+
+<!-- Create / Edit Set builder -->
+<app-set-form-modal [open]="modalOpen()" [editingSet]="editingSet()" (close)="closeModal()" />

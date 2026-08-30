@@ -46,6 +46,7 @@ notification queue — see [Features → Toasts](./features.md#toasts).
   ├── /dashboard
   ├── /weeks
   ├── /workouts
+  ├── /sets
   ├── /weights
   ├── /analytics
   ├── /friends

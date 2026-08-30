@@ -57,6 +57,11 @@ export class WeekGridComponent {
   readonly add = output<number>();
   readonly edit = output<WeekEntry>();
   readonly remove = output<WeekEntry>();
+  /** "Turn this day into a reusable set." Emitted with the day index, and only
+   *  offered for a day that already has something in it — there is nothing to
+   *  capture from an empty column. Like the other three, this component only
+   *  announces the intent; the Weeks page decides what it means. */
+  readonly saveAsSet = output<number>();
 
   protected readonly days = computed<DayColumn[]>(() => {
     const start = this.weekStart();

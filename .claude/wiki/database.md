@@ -45,6 +45,7 @@ has to read other people's names — see
 users/{uid}
 ├── settings/preferences        (single doc)
 ├── workouts/{workoutId}        (collection)
+├── workoutSets/{setId}         (collection — reusable bundles of exercises)
 ├── weights/{weightId}          (collection)
 └── weeks/{weekId}/entries/{entryId}   (sub-collection per week)
 
@@ -131,6 +132,126 @@ Two consequences worth knowing:
   agreeing on one weight would otherwise sync it into the library and freeze one
   day's body weight there. Editing an old entry likewise keeps the weight it was
   logged at, never today's — the log reflects reality at logging time.
+
+### `users/{uid}/workoutSets/{setId}`
+
+The user's saved **sets** — reusable bundles of exercises, for anyone who does
+the same session every week (`WorkoutSetService`). Applied to a day from the
+Weeks page; see [Features → Workout Sets](./features.md#workout-sets-reusable-groups-of-exercises).
+
+🟠 **"Set" means two different things in this app, and the code keeps them
+apart.** `LoggedSet` (`week.service.ts`) is the gym sense — reps at a weight,
+one row of `WeekEntry.sets`. `WorkoutSet` (`workout-set.service.ts`) is *this*:
+a named group of exercises. The gym one used to be called `WorkoutSet`; it was
+renamed when this feature landed, precisely so a reader never has to guess which
+sense a `sets` field carries.
+
+Shape (`WorkoutSet`):
+
+```ts
+{
+  name: string;
+  description: string;         // always written, '' when none — see below
+  items: SetItem[];            // ordered
+  createdAt: Timestamp;        // serverTimestamp()
+}
+
+// SetItem — one exercise, and how it's meant to be done:
+{
+  workoutId: string;           // ref into users/{uid}/workouts (may dangle)
+  workoutName: string;         // denormalized copy
+  muscleGroup: string;         // denormalized copy
+  bodyWeight?: boolean;        // denormalized from Workout.bodyWeight — see below
+  trackTime?: boolean;
+  notes: string;               // always written, '' when none
+  sets: LoggedSet[];           // [] for a cardio item
+  cardio?: CardioLog;          // present only when muscleGroup is CARDIO_GROUP
+}
+```
+
+Ordered `orderBy('createdAt', 'desc')` — newest set first. Single-field, so
+**no composite index**, and the existing owner rule
+(`match /users/{userId}/{document=**}`) already covers it: **this feature needed
+no change to [`firestore.rules`](../../firestore.rules)**. Nothing about a set is
+readable across a friendship, and the collection-group rule matches `entries`
+only, so neither interacts with it.
+
+#### Items are an array, not a sub-collection
+
+A set is a handful of exercises, always read and written whole. One document
+means one read, one atomic write and no fan-out — and it is nowhere near
+Firestore's 1 MiB limit.
+
+🟠 **The footgun that buys:** Firestore rejects `undefined` outright. A top-level
+document gets away with loose optionals because the service builds its payload
+key by key — but an item lives *inside an array*, where an optional field the
+form left `undefined` reaches the write untouched and fails the whole save. So
+`WorkoutSetService.sanitizeItem` runs every item on the way in: optional keys are
+**omitted** rather than set to undefined, and `time`/`heartRate`/`elevation` are
+written as explicit `null`. Add a field to `SetItem` and it must go through
+there too.
+
+`description` and `notes` are **always written, as `''` when there is none** —
+the same reasoning as [Workout notes](#workout-notes): `update` uses `updateDoc`,
+which ignores a missing key, so omitting them could never *clear* one the user
+removed.
+
+#### Body weight is not stored in a set
+
+A body-weight item (`bodyWeight: true`) carries **no weight at all** — every
+`LoggedSet.weight` in it is `null`. A body weight is a fact about a *day*, not
+about a routine: capturing it here would freeze whatever the user weighed when
+they wrote the set down into every future week. `entriesFromSet`
+(`services/apply-set.ts`) fills it from the newest weigh-in at apply time
+instead, the same source [logging one by hand](#body-weight-exercises) uses.
+
+The flag is denormalized onto the item because applying a set must know without
+a library lookup — the exercise may have been deleted by then.
+
+#### Applying a set to a day
+
+`services/apply-set.ts` is pure (no Angular, no Firestore) and holds the three
+rules, each of which had an obvious-but-wrong alternative:
+
+1. **A collision skips that exercise; it doesn't fail the set.** The Weeks page
+   refuses the same workout twice on one day, and a set applied onto a
+   partly-logged day trips that. The rest go in and the caller names what didn't.
+2. **Body-weight exercises take today's weight** — above.
+3. **Nothing is written back to the exercise library.** The usual-weight
+   write-back (`WeeksComponent.syncUsualWeight`) is deliberately skipped: a set's
+   weights are an intention, not what was lifted, and a stale template would
+   quietly overwrite real progress. Editing the resulting entry afterwards goes
+   through the normal path and *does* sync.
+
+`setItemsFromEntries` is the inverse, backing "save this day as a set".
+
+The write itself is `WeekService.addMany` — **one `writeBatch`, one commit**, so
+a set can never land half-applied.
+
+🟠 That method writes a **client** `Timestamp` for `createdAt`, not
+`serverTimestamp()` as everywhere else, and deliberately: every write in a batch
+commits at the same instant, so server timestamps would tie and the day column
+(`orderBy('createdAt','desc')`) would fall back to random document ids —
+scrambling the order of the very routine the user saved. Counting *down* from
+`Date.now()` gives the first item the newest stamp. The cost is that a
+badly-skewed client clock misorders a set's entries against individually-logged
+ones in the same column. That is display order only; nothing reads `createdAt`
+for meaning.
+
+#### What a set does *not* track
+
+Muscle-group rename/delete does **not** cascade into saved sets.
+`SettingsService.commitGroupChange` batches workouts + settings only; extending
+it here would mean a read-modify-write of every set document for a nested array
+field. The consequence is contained: `SetItem.muscleGroup` is a denormalized
+display value, the builder offers the same `loggableGroups()` list the Weeks
+modal does (so an orphaned group lands in `Unassigned` rather than blanking the
+dropdown), and applying the set still works. Same spirit as
+[`WeekEntry.workoutName`](#denormalization--consistency) keeping the old name.
+
+A deleted *exercise* likewise leaves `workoutId` dangling. The set still applies
+— it remembers the name — and the builder labels the block ("no longer in your
+library") rather than emptying it.
 
 ### `users/{uid}/weights/{weightId}`
 

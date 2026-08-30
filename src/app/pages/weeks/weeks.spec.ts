@@ -12,6 +12,11 @@ import {
   uniformWeight,
 } from '../../services/week.service';
 import { WorkoutService, Workout, CARDIO_GROUP } from '../../services/workout.service';
+import {
+  SetItem,
+  WorkoutSet,
+  WorkoutSetService,
+} from '../../services/workout-set.service';
 import { WeightService, WeightEntry } from '../../services/weight.service';
 import { distanceToCanonical, elevationToCanonical } from '../../services/cardio';
 import { ToastService } from '../../services/toast.service';
@@ -35,6 +40,7 @@ interface WeeksView {
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
+  showModal: () => boolean;
   muscleGroups: () => string[];
   modalMuscleGroup: () => string;
   modalWorkoutId: () => string;
@@ -46,7 +52,19 @@ interface WeeksView {
   cardioDistance: WritableSignal<number | null>;
   cardioHeartRate: WritableSignal<number | null>;
   cardioElevation: WritableSignal<number | null>;
-  cardioPace: () => string | null;
+  // --- the day's "+": one workout, or a whole saved set ---
+  openAddChoice: (day: number) => void;
+  choose: (choice: 'workout' | 'set') => void;
+  showAddChoice: () => boolean;
+  showSetPicker: () => boolean;
+  activeDayLabel: () => string;
+  applySet: (set: WorkoutSet) => Promise<void>;
+  itemNames: (set: WorkoutSet) => string;
+  // --- "save this day as a set" ---
+  onSaveDayAsSet: (day: number) => void;
+  showSaveDay: () => boolean;
+  saveDayItems: () => SetItem[];
+  saveDayName: () => string;
 }
 
 const SAMPLE_WORKOUT = {
@@ -162,7 +180,12 @@ describe('WeeksComponent', () => {
     add: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
+    addMany: ReturnType<typeof vi.fn>;
   };
+  /** The saved sets the "+ → Add a set" picker sees. Most tests don't care;
+   *  the ones that do assign to `savedSets` before rendering. */
+  let savedSets: WorkoutSet[];
+  let setService: { sets: () => WorkoutSet[] | undefined };
   let toast: { show: ReturnType<typeof vi.fn> };
   let workoutService: {
     workouts: () => Workout[];
@@ -173,6 +196,7 @@ describe('WeeksComponent', () => {
 
   beforeEach(async () => {
     entriesData = [];
+    savedSets = [];
     distanceUnitValue = 'mi';
     unitValue = 'lbs';
     service = {
@@ -187,7 +211,9 @@ describe('WeeksComponent', () => {
       add: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
+      addMany: vi.fn().mockResolvedValue(undefined),
     };
+    setService = { sets: () => savedSets };
     toast = { show: vi.fn() };
     workoutService = {
       workouts: () => [
@@ -208,6 +234,7 @@ describe('WeeksComponent', () => {
       providers: [
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: workoutService },
+        { provide: WorkoutSetService, useValue: setService },
         { provide: WeightService, useValue: weightService },
         { provide: ToastService, useValue: toast },
         {
@@ -596,15 +623,8 @@ describe('WeeksComponent', () => {
       expect(view.cardioDistance()).toBeNull();
     });
 
-    it('computes pace from the entered duration and distance', () => {
-      view.openAddModal(0);
-      view.onMuscleGroupChange(CARDIO_GROUP);
-      view.onWorkoutChange('w3');
-      view.cardioTimeText.set('30:00');
-      view.cardioDistance.set(5);
-
-      expect(view.cardioPace()).toBe('6:00 /mi');
-    });
+    // Pace moved to CardioFieldsComponent when the set builder needed the same
+    // fields — it's covered in cardio-fields.spec.ts now.
 
     it('saves a cardio session with duration, distance, heart rate and elevation', async () => {
       view.openAddModal(0);
@@ -939,6 +959,243 @@ describe('WeeksComponent', () => {
           notes: 'Windy out',
         })
       );
+    });
+  });
+
+  describe('adding a saved set to a day', () => {
+    /** A saved set holding Bench Press (already in the library) and Dips. */
+    function pushDay(): WorkoutSet {
+      return {
+        id: 's1',
+        name: 'Push Day',
+        description: 'Chest and arms',
+        items: [
+          {
+            workoutId: 'w1',
+            workoutName: 'Bench Press',
+            muscleGroup: 'Chest',
+            notes: '',
+            trackTime: false,
+            sets: [
+              { reps: 10, weight: 135, time: null },
+              { reps: 8, weight: 135, time: null },
+            ],
+          },
+          {
+            workoutId: 'w5',
+            workoutName: 'Dips',
+            muscleGroup: 'Arms',
+            notes: 'slow',
+            trackTime: false,
+            sets: [{ reps: 12, weight: null, time: null }],
+          },
+        ],
+      };
+    }
+
+    it('asks which kind of add the "+" means before opening either form', () => {
+      view.openAddChoice(2);
+
+      expect(view.showAddChoice()).toBe(true);
+      expect(view.showModal()).toBe(false);
+      expect(view.activeDayLabel()).toBe('Wed');
+    });
+
+    it('opens the logging form for "workout"', () => {
+      view.openAddChoice(2);
+      view.choose('workout');
+
+      expect(view.showAddChoice()).toBe(false);
+      expect(view.showModal()).toBe(true);
+      expect(view.editingId()).toBeNull();
+    });
+
+    it('opens the set picker for "set"', () => {
+      view.openAddChoice(2);
+      view.choose('set');
+
+      expect(view.showAddChoice()).toBe(false);
+      expect(view.showSetPicker()).toBe(true);
+      expect(view.showModal()).toBe(false);
+    });
+
+    it('writes every exercise in one batch, on the chosen day', async () => {
+      view.openAddChoice(3);
+      view.choose('set');
+
+      await view.applySet(pushDay());
+
+      expect(service.addMany).toHaveBeenCalledTimes(1);
+      const written = service.addMany.mock.calls[0][0];
+      expect(written).toHaveLength(2);
+      expect(written.map((e: WeekEntry) => e.workoutName)).toEqual([
+        'Bench Press',
+        'Dips',
+      ]);
+      expect(written.every((e: WeekEntry) => e.day === 3)).toBe(true);
+      expect(view.showSetPicker()).toBe(false);
+    });
+
+    it('reports how many were added', async () => {
+      view.openAddChoice(0);
+      await view.applySet(pushDay());
+
+      expect(toast.show).toHaveBeenCalledWith(
+        'Added 2 exercises from Push Day.',
+        'success'
+      );
+    });
+
+    it('skips what that day already has, and says which', async () => {
+      entriesData = [
+        {
+          id: 'e1',
+          day: 0,
+          workoutId: 'w1',
+          workoutName: 'Bench Press',
+          muscleGroup: 'Chest',
+          sets: [{ reps: 10, weight: 135 }],
+        },
+      ];
+      view.openAddChoice(0);
+
+      await view.applySet(pushDay());
+
+      const written = service.addMany.mock.calls[0][0];
+      expect(written.map((e: WeekEntry) => e.workoutName)).toEqual(['Dips']);
+      expect(toast.show).toHaveBeenCalledWith(
+        'Added 1 exercise from Push Day. Bench Press was already logged.',
+        'success'
+      );
+    });
+
+    it('writes nothing and explains when the whole set is already logged', async () => {
+      entriesData = pushDay().items.map((item, i) => ({
+        id: `e${i}`,
+        day: 0,
+        workoutId: item.workoutId,
+        workoutName: item.workoutName,
+        muscleGroup: item.muscleGroup,
+        sets: [],
+      }));
+      view.openAddChoice(0);
+
+      await view.applySet(pushDay());
+
+      expect(service.addMany).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith(
+        'Everything in Push Day is already logged on Mon.',
+        'error'
+      );
+    });
+
+    it('fills a body-weight exercise from the latest weigh-in, not the set', async () => {
+      const set: WorkoutSet = {
+        id: 's2',
+        name: 'Pull Day',
+        description: '',
+        items: [
+          {
+            workoutId: 'w4',
+            workoutName: 'Pull-ups',
+            muscleGroup: 'Back',
+            bodyWeight: true,
+            notes: '',
+            trackTime: false,
+            sets: [{ reps: 10, weight: null, time: null }],
+          },
+        ],
+      };
+      view.openAddChoice(0);
+
+      await view.applySet(set);
+
+      const written = service.addMany.mock.calls[0][0];
+      expect(written[0].sets).toEqual([{ reps: 10, weight: 176.4, time: null }]);
+    });
+
+    it('never writes back to the exercise library', async () => {
+      view.openAddChoice(0);
+      await view.applySet(pushDay());
+
+      // The set's uniform 135 differs from SAMPLE_WORKOUT's usualWeight of 60,
+      // which a hand-logged entry would sync — a template must not.
+      expect(workoutService.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the picker open and says so when the write fails', async () => {
+      service.addMany.mockRejectedValueOnce(new Error('offline'));
+      view.openAddChoice(0);
+      view.choose('set');
+
+      await view.applySet(pushDay());
+
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not add that set. Please try again.',
+        'error'
+      );
+      expect(view.showSetPicker()).toBe(true);
+    });
+
+    it('lists a set’s exercises so the picker can be read at a glance', () => {
+      expect(view.itemNames(pushDay())).toBe('Bench Press · Dips');
+    });
+  });
+
+  describe('saving a day as a set', () => {
+    beforeEach(() => {
+      entriesData = [
+        {
+          id: 'e1',
+          day: 1,
+          workoutId: 'w1',
+          workoutName: 'Bench Press',
+          muscleGroup: 'Chest',
+          notes: 'felt good',
+          sets: [{ reps: 10, weight: 135 }],
+        },
+        {
+          id: 'e2',
+          day: 1,
+          workoutId: 'w4',
+          workoutName: 'Pull-ups',
+          muscleGroup: 'Back',
+          sets: [{ reps: 10, weight: 176.4 }],
+        },
+      ];
+    });
+
+    it('opens the builder pre-filled from that day, with a suggested name', () => {
+      view.onSaveDayAsSet(1);
+
+      expect(view.showSaveDay()).toBe(true);
+      expect(view.saveDayName()).toBe('Tue session');
+      expect(view.saveDayItems().map((i) => i.workoutName)).toEqual([
+        'Bench Press',
+        'Pull-ups',
+      ]);
+    });
+
+    it('carries each entry’s notes and sets across', () => {
+      view.onSaveDayAsSet(1);
+
+      const [bench] = view.saveDayItems();
+      expect(bench.notes).toBe('felt good');
+      expect(bench.sets).toEqual([{ reps: 10, weight: 135 }]);
+    });
+
+    it('captures a body-weight exercise without a weight', () => {
+      view.onSaveDayAsSet(1);
+
+      const pullups = view.saveDayItems()[1];
+      expect(pullups.bodyWeight).toBe(true);
+      expect(pullups.sets).toEqual([{ reps: 10, weight: null }]);
+    });
+
+    it('does nothing for a day with nothing logged', () => {
+      view.onSaveDayAsSet(5);
+
+      expect(view.showSaveDay()).toBe(false);
     });
   });
 });
