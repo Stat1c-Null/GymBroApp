@@ -6,6 +6,17 @@ import type { ChangelogEntry } from '../../components/changelog-entry/changelog-
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 4,
+    date: '2026-08-30',
+    changes: [
+      'Body weight as a workout weight: mark an exercise as "Body weight" and its sets fill in automatically from your latest weigh-in when you log it — reps (and time, if you track it) stay editable. No weigh-in yet? Log one right there without losing what you already typed.',
+      'Workout notes: add a free-text note to any workout when you log it, cardio included. Notes show under the workout on the Weeks page — and on a friend\'s week if you\'re connected, so keep that in mind before you write one.',
+      'Fixed a bug that kept a friend\'s body weight from loading on their profile card.',
+      'Workout Sets: a new /sets page for saving a whole session — exercises, sets, reps, weights and notes — as a named, reusable set. On the Weeks page, + now asks whether to add a single workout or apply a saved set to that day, and you can save any day you\'ve already logged as a new set.',
+      'The set-builder window is easier to use on a larger screen: exercises now lay out in columns instead of one long list, and the window scrolls properly so nothing gets stuck off-screen. Phones and small screens are unchanged.',
+    ],
+  },
+  {
     version: 3,
     date: '2026-08-05',
     changes: [
