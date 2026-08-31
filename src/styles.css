@@ -448,9 +448,41 @@ a:hover {
   padding: 2rem;
   width: 90%;
   max-width: 420px;
+  /* Never taller than the viewport. Without this a tall modal simply spills
+     off both ends of the fixed overlay with no way to reach what's cut off. */
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   transform: scale(0.92) translateY(10px);
   transition: transform var(--transition-normal);
+}
+
+/* ModalComponent's shell. It owns a .modal-body, so the ✕ and the heading stay
+   pinned and only the content scrolls; the shell itself never does. Hand-rolled
+   modals (login's password reset) skip this and scroll as a whole. */
+.modal-content.modal-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-body {
+  min-height: 0; /* a flex child won't shrink below its content without this */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Bleed back into the shell's padding so focus rings on edge controls aren't
+     clipped by the scroll container. */
+  margin: -0.35rem;
+  padding: 0.35rem;
+}
+
+/* Opt-in (ModalComponent's `wide` input) for modals that lay their content out
+   in columns. Below this breakpoint they stay the standard single-column size. */
+@media (min-width: 900px) {
+  .modal-content.modal-wide {
+    max-width: min(1500px, 95vw);
+  }
 }
 
 .modal-overlay.visible .modal-content {

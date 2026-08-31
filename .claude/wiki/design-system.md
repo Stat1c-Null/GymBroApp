@@ -74,11 +74,23 @@ as component-scoped styles:
   / `.list-delete` (hover states), `.list-empty`, `.list-loading`. This is
   the single biggest reusable block — a new list-shaped page should compose
   these rather than inventing new class names.
-- **Modals**: `.modal-overlay` / `.modal-content` / `.modal-header` /
-  `.modal-close` — used by `ModalComponent` and also hand-rolled once
-  (Login's password-reset modal doesn't use `ModalComponent`, it duplicates
-  the same classes inline — worth reusing `ModalComponent` there if that
-  code is touched again).
+- **Modals**: `.modal-overlay` / `.modal-content` / `.modal-shell` /
+  `.modal-body` / `.modal-wide` / `.modal-header` / `.modal-close` — used by
+  `ModalComponent` and also hand-rolled once (Login's password-reset modal
+  doesn't use `ModalComponent`, it duplicates the same classes inline — worth
+  reusing `ModalComponent` there if that code is touched again).
+  - `.modal-content` is capped at `100dvh - 3rem` and scrolls. Without that
+    cap a tall modal spills off both ends of the fixed overlay with no way to
+    reach what's cut off — every modal had this latent until the set builder
+    grew tall enough to hit it.
+  - `ModalComponent` adds `.modal-shell` (which doesn't scroll) and puts the
+    projected content in a `.modal-body` that does, so the ✕ and the heading
+    stay pinned. Hand-rolled modals get only the `.modal-content` cap and
+    scroll as a whole. Nothing inside a modal may rely on escaping its bounds
+    with `position: absolute` — the shell clips.
+  - `.modal-wide` (`ModalComponent`'s `wide` input) widens to
+    `min(1500px, 95vw)` **from 900px up only**; below that every modal keeps
+    the standard 420px single-column size. Only the set builder opts in.
 - **Settings rows**: `.setting-item` / `.setting-label` / `.setting-icon` /
   `.theme-switch` / `.switch-knob` — shared between the Settings page and
   `ThemeToggleComponent`.
