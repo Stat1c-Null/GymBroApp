@@ -4,6 +4,7 @@ import { RangeSelectorComponent } from '../../components/charts/range-selector';
 import { GoalFormModalComponent } from './goal-form-modal';
 import { WeightBurndownComponent } from './weight-burndown/weight-burndown';
 import { MuscleProgressComponent } from './muscle-progress/muscle-progress';
+import { TrainingTotalsComponent } from './totals/training-totals';
 import { EntryBackfillService } from '../../services/entry-backfill.service';
 import { SettingsService } from '../../services/settings.service';
 import { WeightService } from '../../services/weight.service';
@@ -12,9 +13,9 @@ import { WorkoutService } from '../../services/workout.service';
 /**
  * The Analytics page: one range selector scoping a stack of analytics cards.
  *
- * Body weight is the first card; exercise progress (per muscle group) is the second.
- * Both are driven by the same `range` — a per-card range would let two cards disagree
- * about the window they show.
+ * Body weight is the first card, exercise progress (per muscle group) the second,
+ * and training totals the third. All are driven by the same `range` — a per-card
+ * range would let the cards disagree about the window they show.
  *
  * The page also hosts the one-time back-fill that stamps `uid`/`date` onto older
  * logged entries, since the exercise card's cross-week query can't see entries that
@@ -28,6 +29,7 @@ import { WorkoutService } from '../../services/workout.service';
     RangeSelectorComponent,
     WeightBurndownComponent,
     MuscleProgressComponent,
+    TrainingTotalsComponent,
     GoalFormModalComponent,
   ],
   templateUrl: './analytics.html',

@@ -85,3 +85,25 @@ export function formatPace(
   const secs = totalPaceSeconds % 60;
   return `${mins}:${String(secs).padStart(2, '0')} /${unit}`;
 }
+
+/**
+ * A long duration as `"12h 30m"` — or `"45m"` under an hour, and `"—"` for null.
+ *
+ * `formatTime` (`week.service.ts`) is the app's other duration formatter, but it
+ * only ever emits `m:ss`: correct for one session, unreadable for a total, where
+ * forty hours of running would render as `"2400:00"`. Seconds are dropped rather
+ * than carried — at this magnitude they are noise.
+ *
+ * It lives here, beside {@link formatPace}, because total cardio time is its only
+ * caller and this is the app's pure module for formatting session-derived values.
+ * Nothing about it is cardio-specific, so it should move somewhere neutral if a
+ * strength equivalent ever needs it.
+ */
+export function formatDuration(seconds: number | null): string {
+  if (seconds == null) return '—';
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  if (hours === 0) return `${mins}m`;
+  return `${hours}h ${mins}m`;
+}

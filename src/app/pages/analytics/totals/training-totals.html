@@ -1,0 +1,105 @@
+<app-analytics-card
+  title="Totals"
+  subtitle="How much work you've actually put in over the selected window."
+  [state]="state()"
+  emptyMessage="Nothing logged in this range yet — log a workout and your totals will add up here."
+>
+  <a empty-action class="btn btn-primary" routerLink="/weeks">Log a workout</a>
+
+  <!-- Strength. Volume is Σ reps×weight, so it carries a weight unit; the rest
+       are plain counts. -->
+  <div class="control">
+    <span class="control-label">Lifting</span>
+    <div class="stats">
+      <app-stat-tile label="Training days" [value]="trainingDaysText()" hint="days logged" />
+      <app-stat-tile label="Sets" [value]="setsText()" hint="total logged" />
+      <app-stat-tile label="Reps" [value]="repsText()" hint="total logged" />
+      <app-stat-tile
+        label="Weight lifted"
+        [value]="volumeText()"
+        [unit]="volumeText() === '—' ? '' : unit()"
+        hint="sets × reps × weight"
+      />
+    </div>
+  </div>
+
+  <!-- Cardio. Kept apart from the lifting numbers rather than folded in: a
+       5-mile run has nothing to say about sets, reps or tonnage. -->
+  <div class="control">
+    <span class="control-label">Cardio</span>
+    <div class="stats">
+      <app-stat-tile
+        label="Distance"
+        [value]="distanceText()"
+        [unit]="distanceText() === '—' ? '' : distanceUnit()"
+        hint="total covered"
+      />
+      <app-stat-tile label="Time" [value]="cardioTimeText()" hint="total moving" />
+      <app-stat-tile label="Sessions" [value]="cardioSessionsText()" hint="cardio logged" />
+    </div>
+  </div>
+
+  <!-- Where the work went. One table, toggled between rollups — two stacked
+       tables would make this card very tall. -->
+  <div class="control">
+    <span class="control-label">
+      Breakdown
+      <span class="control-hint">ranked by weight lifted</span>
+    </span>
+    <div class="segmented" role="group" aria-label="Breakdown">
+      <button
+        type="button"
+        [class.active]="mode() === 'exercise'"
+        [attr.aria-pressed]="mode() === 'exercise'"
+        (click)="mode.set('exercise')"
+      >
+        By exercise
+      </button>
+      <button
+        type="button"
+        [class.active]="mode() === 'group'"
+        [attr.aria-pressed]="mode() === 'group'"
+        (click)="mode.set('group')"
+      >
+        By muscle group
+      </button>
+    </div>
+  </div>
+
+  @if (rows().length) {
+    <!-- Scrolls inside the card on a narrow screen rather than pushing the
+         page sideways. -->
+    <div class="table-scroll">
+      <table class="totals-table">
+        <caption class="sr-only">
+          Training totals {{ mode() === 'exercise' ? 'by exercise' : 'by muscle group' }},
+          ranked by total weight lifted
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ mode() === 'exercise' ? 'Exercise' : 'Muscle group' }}</th>
+            <th scope="col" class="num">Days</th>
+            <th scope="col" class="num">Sets</th>
+            <th scope="col" class="num">Reps</th>
+            <th scope="col" class="num">Volume ({{ unit() }})</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.key) {
+            <tr>
+              <th scope="row" class="row-label">{{ row.label }}</th>
+              <td class="num">{{ rowCount(row.sessions) }}</td>
+              <td class="num">{{ rowCount(row.sets) }}</td>
+              <td class="num">{{ rowCount(row.reps) }}</td>
+              <td class="num">{{ rowVolume(row) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="text-muted empty-note">
+      No lifting logged in this range — cardio sessions are summarised above.
+    </p>
+  }
+</app-analytics-card>

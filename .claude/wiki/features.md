@@ -412,14 +412,16 @@ Three independent things live on this page:
 ## Analytics
 
 **Files**: `pages/analytics/` (`analytics.ts`/`.html`/`.css`, `goal-form-modal.ts`,
-`weight-burndown/`, `muscle-progress/`), `analytics/` (pure maths — `burndown.ts`,
-`exercise-metrics.ts`), `components/charts/` (reusable chart toolkit),
-`services/weight-analytics.service.ts`, `services/exercise-analytics.service.ts`,
-`services/entry-backfill.service.ts`.
+`weight-burndown/`, `muscle-progress/`, `totals/`), `analytics/` (pure maths —
+`burndown.ts`, `exercise-metrics.ts`, `totals.ts`), `components/charts/`
+(reusable chart toolkit), `services/weight-analytics.service.ts`,
+`services/exercise-analytics.service.ts`, `services/entry-backfill.service.ts`.
 
-One range selector (30d/90d/6m/1y/All) scoping a stack of cards. The range lives on
-the page, never per-card — two cards showing different windows is how a dashboard
-starts lying.
+One range selector (30d/90d/6m/1y/All) scoping a stack of three cards. The range
+lives on the page, never per-card — two cards showing different windows is how a
+dashboard starts lying. (A card may still have its *own* view toggles — the
+metric switch, the totals breakdown switch — because those change what is shown,
+not which window it is drawn from.)
 
 ### Weight burndown
 
@@ -475,14 +477,67 @@ Cardio workouts are excluded here entirely (their reps/weight-based metrics
 above don't apply) rather than folded into the `Unassigned` chip —
 `ExerciseAnalyticsService.exercisesInGroup` and `MuscleProgressComponent`'s
 group list both use `isOrphanGroup()` (`workout.service.ts`), which
-special-cases `CARDIO_GROUP` for exactly this reason. A dedicated cardio
-analytics view would be separate, future work.
+special-cases `CARDIO_GROUP` for exactly this reason. Cardio *totals* now live on
+the Totals card below; a cardio **trend** view — pace over time, weekly mileage —
+is still separate, future work.
+
+### Totals
+
+**Files**: `analytics/totals.ts` (+ `.spec.ts`), `pages/analytics/totals/`.
+
+The other two cards answer "how am I *trending*?"; this one answers "how much
+have I *done*?" — over the page's window, so "All" gives lifetime figures.
+
+Two tile rows and a table. **Lifting**: training days, sets, reps, and total
+weight lifted (Σ reps×weight). **Cardio**: distance, time, sessions — kept in
+their own row rather than folded in, because a 5-mile run has nothing to say
+about tonnage. Then a **breakdown table** ranked by volume, toggled between
+per-exercise and per-muscle-group; cardio is excluded from both, for the same
+reason it's excluded from the card above.
+
+All the arithmetic is pure in `analytics/totals.ts` (`computeTotals`), which
+reuses `totalVolume`/`totalReps`/`setCount` from `exercise-metrics.ts` rather
+than re-summing `reps×weight` — those already encode which rows count as a
+logged set. Three rules worth knowing:
+
+- **`volumeLbs` is `null`, not `0`, when nothing qualified**, and renders `—`.
+  The per-session metrics already return `null` for "not applicable", and that
+  has to survive aggregation: a month of bodyweight-only training genuinely has
+  no tonnage, and `0 lbs` would read as a measurement rather than an absence.
+  Counts are plain numbers, where zero *is* truthful.
+- **The caller decides what is cardio.** `computeTotals` takes entries with
+  `cardio` already resolved, because `CARDIO_GROUP` is a value export from
+  `workout.service.ts` — importing it would drag Firestore into a pure module.
+  `ExerciseAnalyticsService.totalsEntries()` applies the same
+  `muscleGroup === CARDIO_GROUP && entry.cardio` predicate `entrySummary` uses.
+- **Convert the sum, never the addends.** `convertWeight` rounds to one decimal
+  (see [Database → Round-trip drift](./database.md#round-trip-drift--the-trap-to-know-about)),
+  which is negligible once but compounds across thousands of entries. The card
+  sums canonical lbs/miles and calls `displayLifted`/`displayDistance` once. It
+  also formats with `toLocaleString()` rather than the `lifted` pipe, which emits
+  ungrouped digits — fine at `135 lbs`, unreadable at `1,234,567 lbs`.
+
+Body-weight exercises need no special case: a logged body-weight set already
+stores a real weight (the weigh-in at logging time), so it counts toward tonnage
+exactly as the exercise-progress volume metric already treats it.
+
+`formatDuration` (`services/cardio.ts`) renders total cardio time as `"12h 30m"`.
+It exists because `formatTime` only emits `m:ss`, which turns forty hours of
+running into `"2400:00"`.
+
+**No new Firestore reads.** `ExerciseAnalyticsService.entries` already streams
+every entry the user has logged and never filters by date — the range has always
+been applied client-side — so this card costs one more pass over data already in
+memory, and needed no rules or index change.
 
 ### Adding another analytic
 
 Write a reducer in `analytics/` and a card that composes `AnalyticsCardComponent` +
-`LineChartComponent` (or `BarChartComponent`) + `StatTileComponent`. The chart layer should need no change —
-that's the test of the design.
+`StatTileComponent`, plus `LineChartComponent` or `BarChartComponent` if the
+analytic actually wants a chart — Totals doesn't, and didn't have to pretend
+otherwise. The chart layer should need no change — that's the test of the design.
+Totals is the worked example: a pure `totals.ts` + `totals.spec.ts`, one accessor
+on the existing service, a card, and one line on the page.
 
 > **Reading workout history across weeks** (the burndown reads flat `weights`; a
 > *workout* analytic can't). `WeekService` subscribes to one `weekId` at a time, and

@@ -1,0 +1,109 @@
+/* Totals-card chrome. The section labels, hint and tile grid mirror
+   muscle-progress.css — those rules are component-scoped there, so a card that
+   wants the same look has to restate them rather than inherit them. */
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.control + .control {
+  margin-top: 1.25rem;
+}
+
+.control-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.control-hint {
+  margin-left: 0.4rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* Four lifting tiles and three cardio ones: 2 across on a phone, 4 from 560px,
+   so neither row leaves a tile stranded on its own. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+@media (min-width: 560px) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.empty-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* ---- Breakdown table ---- */
+
+/* The table is the one thing here that can outgrow a narrow card, so it scrolls
+   inside its own box. The page itself must never scroll sideways. */
+.table-scroll {
+  max-width: 100%;
+  margin-top: 0.9rem;
+  overflow-x: auto;
+}
+
+.totals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.totals-table th,
+.totals-table td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.totals-table thead th {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.totals-table tbody tr + tr th,
+.totals-table tbody tr + tr td {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.row-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  /* The one column allowed to wrap — exercise names are the long ones, and
+     truncating them would make the ranking unreadable. */
+  white-space: normal;
+  min-width: 8rem;
+}
+
+/* Tabular figures so the columns line up digit-for-digit — the opposite call
+   from stat-tile, where a lone big number reads better proportionally. */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.totals-table tbody td:last-child {
+  font-weight: 600;
+  color: var(--text-primary);
+}
