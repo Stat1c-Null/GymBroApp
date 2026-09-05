@@ -38,12 +38,24 @@ import {
   rowsFromLoggedSets,
   rowsToLoggedSets,
 } from '../../services/set-rows';
-import { entriesFromSet, setItemsFromEntries } from '../../services/apply-set';
+import {
+  SetApplication,
+  entriesFromItems,
+  entriesFromSet,
+  entriesFromWeekSet,
+  setItemsFromEntries,
+  weekSetDaysFromEntries,
+} from '../../services/apply-set';
 import {
   SetItem,
   WorkoutSet,
   WorkoutSetService,
 } from '../../services/workout-set.service';
+import {
+  WeekSet,
+  WeekSetDay,
+  WeekSetService,
+} from '../../services/week-set.service';
 import {
   WeekService,
   WeekEntry,
@@ -80,6 +92,7 @@ export class WeeksComponent {
   private readonly service = inject(WeekService);
   private readonly workoutService = inject(WorkoutService);
   private readonly setService = inject(WorkoutSetService);
+  private readonly weekSetService = inject(WeekSetService);
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
   private readonly weightService = inject(WeightService);
@@ -221,6 +234,9 @@ export class WeeksComponent {
   /** The label of the day being added to, for the chooser and picker headings. */
   protected readonly activeDayLabel = computed(() => DAY_LABELS[this.activeDay()]);
 
+  /** Monday-first day names, for labelling week-set rows in the pickers. */
+  protected readonly dayLabels = DAY_LABELS;
+
   /**
    * Drop every exercise in `set` onto the active day, in one atomic write.
    *
@@ -230,37 +246,21 @@ export class WeeksComponent {
    */
   protected async applySet(set: WorkoutSet): Promise<void> {
     const day = this.activeDay();
-    const { entries, skipped } = entriesFromSet(
+    const applied = entriesFromSet(
       set,
       day,
       this.entriesByDay()[day] ?? [],
       this.latestWeighIn()?.lbs ?? null
     );
-
-    if (entries.length === 0) {
-      this.toast.show(
-        `Everything in ${set.name} is already logged on ${DAY_LABELS[day]}.`,
-        'error'
-      );
-      return;
-    }
-
-    this.applying.set(true);
-    try {
-      await this.service.addMany(entries);
-      const added = `Added ${entries.length} ${entries.length === 1 ? 'exercise' : 'exercises'} from ${set.name}.`;
-      this.toast.show(
-        skipped.length
-          ? `${added} ${skipped.join(', ')} ${skipped.length === 1 ? 'was' : 'were'} already logged.`
-          : added,
-        'success'
-      );
-      this.showSetPicker.set(false);
-    } catch {
-      this.toast.show('Could not add that set. Please try again.', 'error');
-    } finally {
-      this.applying.set(false);
-    }
+    await this.commitApplied(
+      applied,
+      {
+        label: set.name,
+        nothingToAdd: `Everything in ${set.name} is already logged on ${DAY_LABELS[day]}.`,
+        failure: 'Could not add that set. Please try again.',
+      },
+      () => this.showSetPicker.set(false)
+    );
   }
 
   /** A saved set's exercises, summarised for the picker. */
@@ -268,11 +268,144 @@ export class WeeksComponent {
     return set.items.map((item) => item.workoutName).join(' · ');
   }
 
-  // --- "Save this day as a set" ---
+  /** The same summary for one day of a week set. */
+  protected dayItemNames(day: WeekSetDay): string {
+    return day.items.map((item) => item.workoutName).join(' · ');
+  }
+
+  /** Which days a week set fills, for its row in the picker. */
+  protected weekDayNames(weekSet: WeekSet): string {
+    return weekSet.days.map((d) => DAY_LABELS[d.day]).join(' · ');
+  }
+
+  /**
+   * Drop **one day** of a week set onto the active day.
+   *
+   * The other half of the day picker: a week set is often the only place a
+   * routine was written down, and wanting just Thursday out of it shouldn't
+   * mean rebuilding it as a day set. Same rules, same reporting — this reuses
+   * `entriesFromItems`, the function `entriesFromSet` itself delegates to.
+   */
+  protected async applyWeekSetDay(
+    weekSet: WeekSet,
+    dayOfSet: WeekSetDay
+  ): Promise<void> {
+    const day = this.activeDay();
+    const label = `${weekSet.name} · ${DAY_LABELS[dayOfSet.day]}`;
+    const applied = entriesFromItems(
+      dayOfSet.items,
+      day,
+      this.entriesByDay()[day] ?? [],
+      this.latestWeighIn()?.lbs ?? null
+    );
+    await this.commitApplied(
+      applied,
+      {
+        label,
+        nothingToAdd: `Everything in ${label} is already logged on ${DAY_LABELS[day]}.`,
+        failure: 'Could not add that set. Please try again.',
+      },
+      () => this.showSetPicker.set(false)
+    );
+  }
+
+  // --- Loading a whole week ---
+
+  protected readonly showWeekSetPicker = signal(false);
+  protected readonly savedWeekSets = this.weekSetService.weekSets;
+
+  /** Whether the viewed week has anything in it — gates both week-level
+   *  buttons, since there is nothing to capture from an empty week. */
+  protected readonly weekHasEntries = computed(
+    () => (this.entries()?.length ?? 0) > 0
+  );
+
+  /**
+   * Drop a whole week set onto the week being viewed, in one atomic write.
+   *
+   * Purely additive, exactly like applying a day set: a day that already has an
+   * exercise keeps it and that one exercise is skipped. Nothing is cleared, so
+   * loading onto a week you've already logged tops it up rather than replacing
+   * it. The per-day collision scoping lives in `entriesFromWeekSet`.
+   */
+  protected async applyWeekSet(weekSet: WeekSet): Promise<void> {
+    const applied = entriesFromWeekSet(
+      weekSet,
+      this.entries() ?? [],
+      this.latestWeighIn()?.lbs ?? null
+    );
+    await this.commitApplied(
+      applied,
+      {
+        label: weekSet.name,
+        nothingToAdd: `Everything in ${weekSet.name} is already logged this week.`,
+        failure: 'Could not load that week. Please try again.',
+      },
+      () => this.showWeekSetPicker.set(false)
+    );
+  }
+
+  /**
+   * Write what an apply produced and say what happened — shared by all three
+   * apply flows so the "nothing to add" case, the skipped list and the
+   * `applying` guard can't drift between them.
+   *
+   * The three messages are the caller's, not this function's: "already logged
+   * on Mon" and "already logged this week" are different facts, and a shared
+   * wording that covered both would be vaguer than either.
+   */
+  private async commitApplied(
+    { entries, skipped }: SetApplication,
+    messages: { label: string; nothingToAdd: string; failure: string },
+    onDone: () => void
+  ): Promise<void> {
+    if (entries.length === 0) {
+      this.toast.show(messages.nothingToAdd, 'error');
+      return;
+    }
+
+    this.applying.set(true);
+    try {
+      await this.service.addMany(entries);
+      const added = `Added ${entries.length} ${entries.length === 1 ? 'exercise' : 'exercises'} from ${messages.label}.`;
+      this.toast.show(
+        skipped.length
+          ? `${added} ${skipped.join(', ')} ${skipped.length === 1 ? 'was' : 'were'} already logged.`
+          : added,
+        'success'
+      );
+      onDone();
+    } catch {
+      this.toast.show(messages.failure, 'error');
+    } finally {
+      this.applying.set(false);
+    }
+  }
+
+  // --- "Save this day as a set" / "Save this week as a set" ---
 
   protected readonly showSaveDay = signal(false);
   protected readonly saveDayItems = signal<SetItem[]>([]);
   protected readonly saveDayName = signal('');
+
+  protected readonly showSaveWeek = signal(false);
+  protected readonly saveWeekDays = signal<WeekSetDay[]>([]);
+  protected readonly saveWeekName = signal('');
+
+  /**
+   * Which library exercises are body-weight ones.
+   *
+   * Capture needs this because a `WeekEntry` doesn't record it — only the
+   * library does — and a body-weight exercise must be saved with **no** weight
+   * so it picks up the reader's current one at apply time.
+   */
+  private bodyWeightIds(): ReadonlySet<string> {
+    return new Set(
+      (this.workoutService.workouts() ?? [])
+        .filter((w) => w.bodyWeight && w.id)
+        .map((w) => w.id!)
+    );
+  }
 
   /**
    * Open the set builder pre-filled with what's already logged on `day`.
@@ -285,14 +418,24 @@ export class WeeksComponent {
   protected onSaveDayAsSet(day: number): void {
     const entries = this.entriesByDay()[day] ?? [];
     if (entries.length === 0) return;
-    const bodyWeightIds = new Set(
-      (this.workoutService.workouts() ?? [])
-        .filter((w) => w.bodyWeight && w.id)
-        .map((w) => w.id!)
-    );
-    this.saveDayItems.set(setItemsFromEntries(entries, bodyWeightIds));
+    this.saveDayItems.set(setItemsFromEntries(entries, this.bodyWeightIds()));
     this.saveDayName.set(`${DAY_LABELS[day]} session`);
     this.showSaveDay.set(true);
+  }
+
+  /**
+   * The same idea one level up: the whole week being viewed, captured as a week
+   * set and opened in the builder for a name.
+   *
+   * Rest days are dropped rather than stored empty, so what lands in the builder
+   * is exactly the days that had something on them.
+   */
+  protected onSaveWeekAsSet(): void {
+    const entries = this.entries() ?? [];
+    if (entries.length === 0) return;
+    this.saveWeekDays.set(weekSetDaysFromEntries(entries, this.bodyWeightIds()));
+    this.saveWeekName.set(this.rangeLabel());
+    this.showSaveWeek.set(true);
   }
 
   // --- Add / edit one logged workout ---

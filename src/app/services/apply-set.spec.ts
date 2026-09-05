@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { entriesFromSet, setItemsFromEntries } from './apply-set';
+import {
+  entriesFromSet,
+  entriesFromWeekSet,
+  setItemsFromEntries,
+  weekSetDaysFromEntries,
+} from './apply-set';
 import { WeekEntry } from './week.service';
+import { WeekSet, WeekSetDay } from './week-set.service';
 import { SetItem, WorkoutSet } from './workout-set.service';
 
 function item(overrides: Partial<SetItem> = {}): SetItem {
@@ -232,5 +238,154 @@ describe('setItemsFromEntries', () => {
     expect(entries[0].notes).toBe('felt good');
     expect(entries[1].trackTime).toBe(true);
     expect(entries[0].sets).toEqual(day[0].sets);
+  });
+});
+
+function weekSet(days: WeekSetDay[]): WeekSet {
+  return { id: 'ws1', name: 'PPL Split', description: '', days };
+}
+
+describe('entriesFromWeekSet', () => {
+  it('maps every day onto its own column, in weekday order', () => {
+    const set = weekSet([
+      { day: 3, items: [item({ workoutId: 'w2', workoutName: 'Squat' })] },
+      { day: 0, items: [item()] },
+    ]);
+
+    const { entries, skipped } = entriesFromWeekSet(set, [], null);
+
+    expect(skipped).toEqual([]);
+    expect(entries.map((e) => [e.workoutName, e.day])).toEqual([
+      ['Bench Press', 0],
+      ['Squat', 3],
+    ]);
+  });
+
+  it('scopes the collision guard per day, so the same exercise can repeat', () => {
+    // The shape of an upper/lower split: Bench on Mon and again on Thu.
+    const set = weekSet([
+      { day: 0, items: [item()] },
+      { day: 3, items: [item()] },
+    ]);
+
+    const { entries, skipped } = entriesFromWeekSet(set, [], null);
+
+    expect(skipped).toEqual([]);
+    expect(entries.map((e) => e.day)).toEqual([0, 3]);
+  });
+
+  it('skips only the day that already has that exercise, and names the day', () => {
+    const set = weekSet([
+      { day: 0, items: [item()] },
+      { day: 3, items: [item()] },
+    ]);
+
+    const { entries, skipped } = entriesFromWeekSet(
+      set,
+      [entry({ day: 0 })],
+      null
+    );
+
+    expect(skipped).toEqual(['Bench Press (Mon)']);
+    expect(entries.map((e) => e.day)).toEqual([3]);
+  });
+
+  it('fills every body-weight day from today’s weigh-in, not the set', () => {
+    const bodyWeightItem = item({
+      workoutId: 'w3',
+      workoutName: 'Pull-ups',
+      bodyWeight: true,
+      sets: [
+        { reps: 8, weight: null, time: null },
+        { reps: 6, weight: null, time: null },
+      ],
+    });
+    const set = weekSet([
+      { day: 1, items: [bodyWeightItem] },
+      { day: 4, items: [bodyWeightItem] },
+    ]);
+
+    const { entries } = entriesFromWeekSet(set, [], 176.4);
+
+    expect(entries).toHaveLength(2);
+    for (const written of entries) {
+      expect(written.sets.every((s) => s.weight === 176.4)).toBe(true);
+    }
+  });
+
+  it('reports nothing to add when every day is already logged', () => {
+    const set = weekSet([
+      { day: 0, items: [item()] },
+      { day: 3, items: [item()] },
+    ]);
+
+    const { entries, skipped } = entriesFromWeekSet(
+      set,
+      [entry({ day: 0 }), entry({ day: 3 })],
+      null
+    );
+
+    expect(entries).toEqual([]);
+    expect(skipped).toEqual(['Bench Press (Mon)', 'Bench Press (Thu)']);
+  });
+});
+
+describe('weekSetDaysFromEntries', () => {
+  it('buckets a logged week by day, dropping the rest days', () => {
+    const days = weekSetDaysFromEntries(
+      [
+        entry({ day: 0 }),
+        entry({ day: 4, workoutId: 'w2', workoutName: 'Squat' }),
+      ],
+      new Set()
+    );
+
+    expect(days.map((d) => d.day)).toEqual([0, 4]);
+    expect(days[0].items.map((i) => i.workoutName)).toEqual(['Bench Press']);
+    expect(days[1].items.map((i) => i.workoutName)).toEqual(['Squat']);
+  });
+
+  it('captures a body-weight exercise without a weight', () => {
+    const days = weekSetDaysFromEntries(
+      [
+        entry({
+          day: 2,
+          workoutId: 'w3',
+          workoutName: 'Pull-ups',
+          sets: [{ reps: 8, weight: 176.4, time: null }],
+        }),
+      ],
+      new Set(['w3'])
+    );
+
+    expect(days[0].items[0].bodyWeight).toBe(true);
+    expect(days[0].items[0].sets[0].weight).toBeNull();
+  });
+
+  it('returns nothing for a week with nothing logged', () => {
+    expect(weekSetDaysFromEntries([], new Set())).toEqual([]);
+  });
+
+  it('round-trips a week: capture, then apply, gives the same columns back', () => {
+    const logged = [
+      entry({ day: 0, notes: 'felt good' }),
+      entry({ day: 0, workoutId: 'w2', workoutName: 'Dips', trackTime: true }),
+      entry({ day: 3, workoutId: 'w4', workoutName: 'Squat', muscleGroup: 'Legs' }),
+    ];
+
+    const { entries } = entriesFromWeekSet(
+      weekSet(weekSetDaysFromEntries(logged, new Set())),
+      [],
+      null
+    );
+
+    expect(entries.map((e) => [e.workoutName, e.day])).toEqual([
+      ['Bench Press', 0],
+      ['Dips', 0],
+      ['Squat', 3],
+    ]);
+    expect(entries[0].notes).toBe('felt good');
+    expect(entries[1].trackTime).toBe(true);
+    expect(entries[2].muscleGroup).toBe('Legs');
   });
 });

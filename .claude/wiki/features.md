@@ -54,9 +54,13 @@ has an "add" button.
 
 That button no longer opens the logging form directly: a day can be filled two
 ways now, so it asks which first — **log one workout**, or **drop in a saved
-set**. See [Workout Sets](#workout-sets-reusable-groups-of-exercises). A day
+set**. See [Workout Sets](#workout-sets-reusable-days-and-weeks). A day
 that already has something logged also carries a small "save as set" button in
 its column header, which captures it as a reusable set.
+
+The page header carries the same pair one level up — **"Save week as set"** and
+**"Load week set"** — beside the week nav. They live in `weeks.html` rather than
+in `WeekNavComponent`, which the read-only friend-week view shares.
 
 The grid and the nav are **shared components**, not page markup: the Friends
 page renders a friend's week from the same two, read-only and compact. So the
@@ -188,18 +192,30 @@ See
 [Database → Body-weight exercises](./database.md#body-weight-exercises) for the
 stored shape, and Weeks above for what logging one does.
 
-## Workout Sets (reusable groups of exercises)
+## Workout Sets (reusable days and weeks)
 
-**Files**: `services/workout-set.service.ts`, `services/apply-set.ts`
-(+ `.spec.ts`), `services/set-rows.ts` (+ `.spec.ts`), `pages/sets/`,
-`components/set-form-modal/` (`set-form-modal.ts`, `set-item-editor.ts`,
-`builder-item.ts` + `.spec.ts`), `components/set-rows-editor/`,
-`components/cardio-fields/`.
+**Files**: `services/workout-set.service.ts`, `services/week-set.service.ts`,
+`services/apply-set.ts` (+ `.spec.ts`), `services/set-rows.ts` (+ `.spec.ts`),
+`pages/sets/`, `components/set-form-modal/` (`set-form-modal.ts`,
+`set-item-editor.ts`, `builder-item.ts` + `.spec.ts`),
+`components/set-rows-editor/`, `components/cardio-fields/`.
 
 For anyone who does the same session every week and would rather not re-enter
-it. A **set** is a named, ordered group of exercises with the reps, weights and
-notes they're meant to be done at; applying one to a day creates a normal
-`WeekEntry` per exercise, each editable afterwards like any other.
+it. There are two kinds, and they nest:
+
+- A **day set** (`WorkoutSet`) is a named, ordered group of exercises with the
+  reps, weights and notes they're meant to be done at; applying one to a day
+  creates a normal `WeekEntry` per exercise, each editable afterwards like any
+  other.
+- A **week set** (`WeekSet`) is a whole Mon–Sun plan — a list of
+  `{ day, items }`, where `items` is the *same* `SetItem[]` a day set holds.
+  Loading one fills every day it covers in a single batch.
+
+The week kind is built almost entirely out of the day kind's machinery:
+`SetItem` is reused verbatim, `sanitizeItem` is shared (and had to be — see
+[Database → weekSets](./database.md#usersuidweeksetssetid)), the apply rules are
+one function called once per day, and the builder is the same component in a
+different mode.
 
 🟠 **"Set" is overloaded, and the code disambiguates.** The gym sense — reps at
 a weight — is `LoggedSet`; it was renamed from `WorkoutSet` when this feature
@@ -208,16 +224,27 @@ landed so that name could mean the bundle. See
 
 ### The `/sets` page
 
-A thin list, modelled on the Workouts page: one card per set with its name,
-description, exercise count, and every exercise summarised — using
-`entrySummary()`, the *same* pure function the week grid uses, so a set reads
-exactly like the day it will become. (That function's parameter was widened to
-a structural `SummarizableExercise` for this; `WeekEntry` and `SetItem` both
-satisfy it.) Contents are always visible rather than behind an accordion — the
-whole point of a set is what's in it, and there are only ever a handful.
+Two stacked sections under one page title — **Day sets**, then **Week sets** —
+each with its own "New …" button, its own loading-vs-empty state, and its own
+empty-state copy. Stacked rather than tabbed: nothing is hidden behind a click,
+and a user typically has a handful of each.
 
-Create/edit is entirely owned by **`SetFormModalComponent`**, driven by inputs
-(`editingSet`, `presetItems`, `presetName`) and emitting `saved`/`close` — the
+A day-set card is a thin list modelled on the Workouts page: name, description,
+exercise count, and every exercise summarised — using `entrySummary()`, the
+*same* pure function the week grid uses, so a set reads exactly like the day it
+will become. (That function's parameter was widened to a structural
+`SummarizableExercise` for this; `WeekEntry` and `SetItem` both satisfy it.)
+Contents are always visible rather than behind an accordion — the whole point of
+a set is what's in it, and there are only ever a handful.
+
+A week-set card is the same card with one more level: `N days · M exercises` in
+the stats, then one row per stored day (`Mon`, `Wed`, …) listing that day's
+exercises through the very same `entrySummary()`. Rest days aren't stored, so the
+days shown are exactly the ones a load will fill.
+
+Create/edit for both is entirely owned by **`SetFormModalComponent`**, driven by
+inputs (`mode`, `editingSet`/`editingWeekSet`, `presetItems`/`presetDays`,
+`presetName`) and emitting `saved`/`savedWeek`/`close` — the
 same shape `WorkoutFormModalComponent` has, and for the same reason: the Weeks
 page opens it too.
 
@@ -229,6 +256,20 @@ form minus the day: muscle group → workout → set count → per-set rows (or 
 cardio fields) → optional note. It even carries the same "+ Create new
 workout" link, layering `WorkoutFormModalComponent` over the builder exactly
 as it layers over the logging modal.
+
+**`mode: 'week'` is the same component, not a twin.** It renders seven
+collapsible day sections and writes to `WeekSetService`; everything else — the
+name, the description, the error line, the validation loop, the remove, the
+create-workout sub-modal — is shared. The blocks stay **one flat list**, each
+`BuilderItem` stamped with a `day`; the sections are a view over that list
+(`itemsForDay`), which is what keeps the rest identical. `day` is builder-only
+state and never reaches `SetItem` — a stored item doesn't carry its own day,
+`WeekSetDay` groups items *by* day.
+
+Two deliberate differences in week mode: days with exercises start expanded and
+empty ones collapsed (so seven headers fit on one screen), and a fresh week
+builder starts with **no** blocks rather than the day builder's one — an empty
+Tuesday is normal, and there'd be no obvious day to put a first block on.
 
 Validation and conversion happen together in `toSetItem` (`builder-item.ts`,
 pure and unit-tested), which returns either the storable `SetItem` or the first
@@ -264,6 +305,12 @@ The `+` on a day column opens a chooser ("Log a workout" / "Add a set"); the
 second opens a picker listing saved sets with their exercises. Choosing one
 writes every exercise in a single batch (`WeekService.addMany`).
 
+Below the day sets, that same picker offers **one day pulled out of a week set**
+— one row per non-empty day, labelled `PPL Split · Thu`. A week set is often the
+only place a routine was written down, and wanting just Thursday out of it
+shouldn't mean rebuilding it as a day set. It calls `entriesFromItems`, the
+function `entriesFromSet` itself delegates to.
+
 The rules live in `services/apply-set.ts` — pure, no Angular, no Firestore, in
 the spirit of `entry-summary.ts`. Three of them, each with an
 obvious-but-wrong alternative, are spelled out in
@@ -272,7 +319,25 @@ a collision **skips** that exercise rather than failing the set, body-weight
 exercises take **today's** weight, and **nothing** is written back to the
 exercise library. The toast reports the outcome, naming what was skipped.
 
-### Save this day as a set
+`WeeksComponent.commitApplied` is the shared tail of all three apply flows — the
+write, the skipped list, the `applying` guard. The three *messages* stay with the
+callers: "already logged on Mon" and "already logged this week" are different
+facts, and one wording covering both would be vaguer than either.
+
+### Loading a week set into a week
+
+"Load week set" in the page header opens a picker of week sets, each row naming
+the days it fills. Choosing one calls `entriesFromWeekSet` and writes the whole
+week with the **unchanged** `WeekService.addMany` — one batch, one commit, so a
+week can never land half-applied.
+
+It is **purely additive**: a day that already has an exercise keeps it and that
+one exercise is skipped, by name and day. Nothing is cleared, and there is
+deliberately no "replace this week". See
+[Database → Applying a week to a week](./database.md#applying-a-week-to-a-week)
+for why the collision guard is rebuilt per day.
+
+### Save this day (or week) as a set
 
 The inverse, and in practice how most sets get built: the quickest moment to
 write a routine down is just after doing it. A "save as set" button on any
@@ -281,9 +346,14 @@ builder **pre-filled** rather than saving silently — a set wants a name, and
 this is the moment to look over what's being kept. The round trip is stable:
 capture preserves the column's order, and `addMany` restores it.
 
+"Save week as set" in the page header is the same move one level up:
+`weekSetDaysFromEntries` captures every non-empty day of the viewed week and
+opens the builder in week mode, pre-filled and named after the week's date range.
+It is disabled while the week is empty — there is nothing to capture.
+
 ### Interaction with the rest of the app
 
-- **No security-rules change.** The collection sits under `users/{uid}`, which
+- **No security-rules change.** Both collections sit under `users/{uid}`, which
   the existing owner rule already covers. Nothing is shared across a
   friendship.
 - **Analytics needs nothing.** Applied entries are ordinary `WeekEntry` docs
@@ -292,9 +362,11 @@ capture preserves the column's order, and `addMany` restores it.
 - **`loggableGroups()`/`workoutsInGroup()`** moved into `workout.service.ts`
   when the builder needed the Weeks modal's group list, rather than becoming a
   third copy.
-- The Weeks page gained the chooser, the picker and the capture flow;
+- The Weeks page gained the chooser, the pickers and both capture flows;
   `WeekGridComponent` gained one output (`saveAsSet`) and stays presentational,
-  so the friend-week view is unaffected.
+  so the friend-week view is unaffected. The two week-level buttons live in
+  `weeks.html`'s own `.list-header`, **not** in `WeekNavComponent` — that
+  component is shared read-only with the friend-week view.
 
 ## Weights (body weight tracking)
 

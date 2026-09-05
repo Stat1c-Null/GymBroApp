@@ -55,6 +55,44 @@
   color: var(--text-muted);
 }
 
+/* The two section headings under the page title. The page header above them
+   carries no button, so these need their own top margin to separate the
+   sections rather than the usual list-header spacing. */
+.section-header {
+  margin-top: 2rem;
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* A week-set card lists its days rather than a flat exercise list — the day is
+   the thing that distinguishes it from a day set. */
+.week-set-day {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+
+.week-set-day-label {
+  flex-shrink: 0;
+  min-width: 2.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.week-set-day-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  list-style: none;
+}
+
 @media (max-width: 768px) {
   .list-header {
     flex-direction: column;

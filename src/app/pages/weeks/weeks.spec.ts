@@ -17,6 +17,11 @@ import {
   WorkoutSet,
   WorkoutSetService,
 } from '../../services/workout-set.service';
+import {
+  WeekSet,
+  WeekSetDay,
+  WeekSetService,
+} from '../../services/week-set.service';
 import { WeightService, WeightEntry } from '../../services/weight.service';
 import { distanceToCanonical, elevationToCanonical } from '../../services/cardio';
 import { ToastService } from '../../services/toast.service';
@@ -186,6 +191,8 @@ describe('WeeksComponent', () => {
    *  the ones that do assign to `savedSets` before rendering. */
   let savedSets: WorkoutSet[];
   let setService: { sets: () => WorkoutSet[] | undefined };
+  let savedWeekSets: WeekSet[];
+  let weekSetService: { weekSets: () => WeekSet[] | undefined };
   let toast: { show: ReturnType<typeof vi.fn> };
   let workoutService: {
     workouts: () => Workout[];
@@ -197,6 +204,7 @@ describe('WeeksComponent', () => {
   beforeEach(async () => {
     entriesData = [];
     savedSets = [];
+    savedWeekSets = [];
     distanceUnitValue = 'mi';
     unitValue = 'lbs';
     service = {
@@ -214,6 +222,7 @@ describe('WeeksComponent', () => {
       addMany: vi.fn().mockResolvedValue(undefined),
     };
     setService = { sets: () => savedSets };
+    weekSetService = { weekSets: () => savedWeekSets };
     toast = { show: vi.fn() };
     workoutService = {
       workouts: () => [
@@ -235,6 +244,7 @@ describe('WeeksComponent', () => {
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: workoutService },
         { provide: WorkoutSetService, useValue: setService },
+        { provide: WeekSetService, useValue: weekSetService },
         { provide: WeightService, useValue: weightService },
         { provide: ToastService, useValue: toast },
         {

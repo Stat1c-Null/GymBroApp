@@ -5,8 +5,20 @@
       <h1 class="page-title">Weeks</h1>
       <p class="page-subtitle">{{ rangeLabel() }}</p>
     </div>
-    <app-week-nav [isCurrentWeek]="isCurrentWeek()" (previous)="previousWeek()" (next)="nextWeek()"
-      (thisWeek)="goToThisWeek()" />
+    <div class="week-header-actions">
+      <!-- Week-level set actions live here rather than in app-week-nav, which
+           the read-only friend-week view shares. -->
+      <button type="button" class="btn btn-secondary" (click)="onSaveWeekAsSet()"
+        [disabled]="!weekHasEntries()"
+        title="Save every day of this week as a reusable week set">
+        Save week as set
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="showWeekSetPicker.set(true)">
+        Load week set
+      </button>
+      <app-week-nav [isCurrentWeek]="isCurrentWeek()" (previous)="previousWeek()" (next)="nextWeek()"
+        (thisWeek)="goToThisWeek()" />
+    </div>
   </div>
 
   <!-- 7-day grid (shared with the friend-week view, editable here) -->
@@ -29,7 +41,9 @@
   </div>
 </app-modal>
 
-<!-- Pick a saved set to drop onto the active day -->
+<!-- Pick a saved set to drop onto the active day. Below the day sets, the same
+     rows for a single day pulled out of a week set — a routine written down as
+     a week shouldn't have to be rebuilt to reuse one day of it. -->
 <app-modal [open]="showSetPicker()" [title]="'Add a set to ' + activeDayLabel()"
   (close)="showSetPicker.set(false)">
   @if (savedSets(); as list) {
@@ -45,6 +59,45 @@
       <p class="form-hint">
         No sets yet. Build one on the Sets page, or log a day here and use “Save as set” on its
         column header.
+      </p>
+    }
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
+
+  @if (savedWeekSets(); as weeks) {
+    @if (weeks.length) {
+      <p class="picker-group-label">From a week set</p>
+      @for (w of weeks; track w.id) {
+        @for (d of w.days; track d.day) {
+          <button type="button" class="picker-row" (click)="applyWeekSetDay(w, d)"
+            [disabled]="applying()">
+            <span class="picker-name">{{ w.name }} · {{ dayLabels[d.day] }}</span>
+            <span class="picker-items">{{ dayItemNames(d) }}</span>
+          </button>
+        }
+      }
+    }
+  }
+</app-modal>
+
+<!-- Pick a week set to load into the week being viewed -->
+<app-modal [open]="showWeekSetPicker()" title="Load a week set"
+  (close)="showWeekSetPicker.set(false)">
+  @if (savedWeekSets(); as list) {
+    @for (w of list; track w.id) {
+      <button type="button" class="picker-row" (click)="applyWeekSet(w)" [disabled]="applying()">
+        <span class="picker-name">{{ w.name }}</span>
+        @if (w.description) {
+          <span class="picker-description">{{ w.description }}</span>
+        }
+        <span class="picker-items">{{ weekDayNames(w) }}</span>
+      </button>
+    } @empty {
+      <p class="form-hint">
+        No week sets yet. Log a week the way you like it, then use “Save week as set” above.
       </p>
     }
   } @else {
@@ -151,3 +204,8 @@
 <!-- "Save this day as a set": the builder, opened pre-filled from a logged day -->
 <app-set-form-modal [open]="showSaveDay()" [presetItems]="saveDayItems()" [presetName]="saveDayName()"
   (close)="showSaveDay.set(false)" />
+
+<!-- "Save this week as a set": the same builder in week mode, opened pre-filled
+     from every day the viewed week has something on. -->
+<app-set-form-modal [open]="showSaveWeek()" mode="week" [presetDays]="saveWeekDays()"
+  [presetName]="saveWeekName()" (close)="showSaveWeek.set(false)" />

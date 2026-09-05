@@ -83,7 +83,7 @@ export interface WorkoutSet {
  * It also enforces the one invariant a form could get wrong: a body-weight
  * item stores no weight (see {@link SetItem.bodyWeight}).
  */
-function sanitizeItem(item: SetItem): SetItem {
+export function sanitizeItem(item: SetItem): SetItem {
   const clean: SetItem = {
     workoutId: item.workoutId,
     workoutName: item.workoutName,

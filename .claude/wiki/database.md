@@ -46,6 +46,7 @@ users/{uid}
 ├── settings/preferences        (single doc)
 ├── workouts/{workoutId}        (collection)
 ├── workoutSets/{setId}         (collection — reusable bundles of exercises)
+├── weekSets/{setId}            (collection — reusable Mon–Sun plans)
 ├── weights/{weightId}          (collection)
 └── weeks/{weekId}/entries/{entryId}   (sub-collection per week)
 
@@ -137,7 +138,7 @@ Two consequences worth knowing:
 
 The user's saved **sets** — reusable bundles of exercises, for anyone who does
 the same session every week (`WorkoutSetService`). Applied to a day from the
-Weeks page; see [Features → Workout Sets](./features.md#workout-sets-reusable-groups-of-exercises).
+Weeks page; see [Features → Workout Sets](./features.md#workout-sets-reusable-days-and-weeks).
 
 🟠 **"Set" means two different things in this app, and the code keeps them
 apart.** `LoggedSet` (`week.service.ts`) is the gym sense — reps at a weight,
@@ -252,6 +253,94 @@ dropdown), and applying the set still works. Same spirit as
 A deleted *exercise* likewise leaves `workoutId` dangling. The set still applies
 — it remembers the name — and the builder labels the block ("no longer in your
 library") rather than emptying it.
+
+### `users/{uid}/weekSets/{setId}`
+
+The user's saved **week sets** — a whole Mon–Sun plan, for anyone on a fixed
+split (`WeekSetService`, `services/week-set.service.ts`). Loaded into a week from
+the Weeks page; see
+[Features → Workout Sets](./features.md#workout-sets-reusable-days-and-weeks).
+
+Where a [`WorkoutSet`](#usersuidworkoutsetssetid) is one session, a `WeekSet` is
+seven of them — or however many the user actually trains. Shape:
+
+```ts
+{
+  name: string;
+  description: string;         // always written, '' when none — same rule as WorkoutSet
+  days: WeekSetDay[];          // sorted by `day`, only non-empty days present
+  createdAt: Timestamp;        // serverTimestamp()
+}
+
+// WeekSetDay — one weekday of the plan:
+{
+  day: number;                 // 0 = Mon … 6 = Sun, same as WeekEntry.day
+  items: SetItem[];            // the *same* SetItem as a day set — see below
+}
+```
+
+Ordered `orderBy('createdAt', 'desc')`, single-field, so **no composite index**;
+the existing owner rule (`match /users/{userId}/{document=**}`) already covers it,
+so like the day-set collection this needed **no change to
+[`firestore.rules`](../../firestore.rules)**. Nothing is readable across a
+friendship.
+
+#### Its own collection, not a `kind` on `workoutSets`
+
+The alternative was one collection with a discriminator. It was rejected because
+the two shapes are read in different places for different reasons, and a
+discriminator would put a branch in front of every read of a feature that has
+none today — plus every pre-existing document would need a default for the
+missing field. Two collections cost one extra `toSignal` stream and nothing else.
+
+#### `SetItem` is reused verbatim, and so is `sanitizeItem`
+
+A week set stores the identical item shape a day set does — which is what makes
+the whole feature cheap: the builder, `entrySummary()`, the apply rules and the
+capture path all work on `SetItem` and needed no widening.
+
+🟠 That reuse extends to the write guard, and it has to.
+`WorkoutSetService.sanitizeItem` is **exported** rather than reimplemented here,
+because [the `undefined`-inside-an-array footgun](#items-are-an-array-not-a-sub-collection)
+bites a week set at **two** levels (`days[].items[]`), and a second copy of the
+rule would drift the moment a field is added to `SetItem`. `sanitizeDays` in
+`week-set.service.ts` maps every item of every day through it, drops days whose
+`items` are empty, and sorts what's left by `day`.
+
+#### Rest days are absent, not empty
+
+Only days with exercises are stored, so the document says what the plan *is*
+rather than padding it with five empty slots — and `days.length` is directly the
+"4 days" stat the `/sets` card shows. The consequence for readers: **never index
+`days` by weekday**; it is a list to iterate, and `WeekSetDay.day` is where the
+weekday lives.
+
+#### Applying a week to a week
+
+`entriesFromWeekSet` (`services/apply-set.ts`) is a loop over the day function,
+and the loop is the point: **the collision guard is rebuilt per day**, from that
+day's own entries. One `taken` set shared across the week would mean logging
+Bench Press on Monday silently swallowed the Thursday copy of it — which is the
+shape of an upper/lower split. The
+[three rules](#applying-a-set-to-a-day) otherwise apply unchanged, including
+body-weight items taking *today's* weigh-in on every day they appear.
+
+Skipped names are qualified with the weekday (`"Bench Press (Mon)"`), since the
+same exercise can collide on more than one day.
+
+Loading a week is **purely additive** — it never clears a day. Loading the same
+week set twice reports everything as skipped and writes nothing; there is
+deliberately no "replace this week" action.
+
+The write is `WeekService.addMany` **unchanged**: it already accepts entries with
+varying `day` values and stamps `date` per entry, so a whole week commits in one
+batch and can never land half-applied. Its descending
+`Timestamp.fromMillis(now - index)` only has to order entries *within* a column,
+so one flat index run across the week still orders every column correctly.
+
+`weekSetDaysFromEntries` is the inverse, backing "save this week as a set" — it
+buckets with `bucketByDay` and maps each non-empty day through the same
+`setItemsFromEntries` the day flow uses.
 
 ### `users/{uid}/weights/{weightId}`
 

@@ -32,6 +32,16 @@ export interface BuilderItem {
   /** Stable identity for `@for (… ; track …)`. An array index would do the
    *  wrong thing the moment an exercise is removed from the middle. */
   readonly key: number;
+  /**
+   * Which weekday this block sits on, 0 = Mon … 6 = Sun — week-set builder only,
+   * where one flat list of blocks is rendered grouped under seven day sections.
+   * A day set ignores it entirely and leaves it at 0.
+   *
+   * Builder-only state: it never reaches {@link SetItem}, because a stored item
+   * doesn't carry its own day — `WeekSetDay` groups items *by* day, and a day
+   * set has no day at all until it is applied to one.
+   */
+  readonly day: WritableSignal<number>;
   readonly muscleGroup: WritableSignal<string>;
   readonly workoutId: WritableSignal<string>;
   /**
@@ -56,10 +66,11 @@ export interface BuilderItem {
   readonly cardioElevation: WritableSignal<number | null>;
 }
 
-/** A new, empty exercise block in `group`. */
-export function blankItem(key: number, group: string): BuilderItem {
+/** A new, empty exercise block in `group`, on `day` when building a week set. */
+export function blankItem(key: number, group: string, day = 0): BuilderItem {
   return {
     key,
+    day: signal(day),
     muscleGroup: signal(group),
     workoutId: signal(''),
     name: signal(''),
@@ -81,12 +92,14 @@ export function builderItemFrom(
   item: SetItem,
   key: number,
   unit: WeightUnit,
-  distanceUnit: DistanceUnit
+  distanceUnit: DistanceUnit,
+  day = 0
 ): BuilderItem {
   const cardio = fromCardioLog(item.cardio ?? null, distanceUnit);
   const rows = rowsFromLoggedSets(item.sets, unit);
   return {
     key,
+    day: signal(day),
     muscleGroup: signal(item.muscleGroup),
     workoutId: signal(item.workoutId),
     name: signal(item.workoutName),

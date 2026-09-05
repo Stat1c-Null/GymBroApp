@@ -97,6 +97,28 @@
   color: var(--text-secondary);
 }
 
+/* Separates the "from a week set" rows from the day sets above them. */
+.picker-group-label {
+  margin: 1.1rem 0 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Week-level actions ---- */
+
+/* The two week-set buttons sit beside the week nav in the page header. They
+   wrap onto their own row before the nav does, so the nav keeps its position. */
+.week-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
 /* On small screens the grid stacks (handled inside week-grid), so the page no
    longer needs to be viewport-height. Stack the title above the week nav too,
    giving the nav its own full-width row. */

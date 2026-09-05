@@ -6,6 +6,7 @@ import {
   WorkoutSet,
   WorkoutSetService,
 } from '../../services/workout-set.service';
+import { WeekSet, WeekSetService } from '../../services/week-set.service';
 import { WorkoutService, MUSCLE_GROUPS, CARDIO_GROUP } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
@@ -29,6 +30,13 @@ describe('SetsComponent', () => {
   let unit: 'kg' | 'lbs';
   let service: {
     sets: () => WorkoutSet[] | undefined;
+    add: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
+  let weekSetsData: WeekSet[] | undefined;
+  let weekService: {
+    weekSets: () => WeekSet[] | undefined;
     add: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
@@ -62,12 +70,20 @@ describe('SetsComponent', () => {
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
     };
+    weekSetsData = [];
+    weekService = {
+      weekSets: () => weekSetsData,
+      add: vi.fn().mockResolvedValue('new-week-id'),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
     toast = { show: vi.fn() };
 
     await TestBed.configureTestingModule({
       imports: [SetsComponent],
       providers: [
         { provide: WorkoutSetService, useValue: service },
+        { provide: WeekSetService, useValue: weekService },
         { provide: WorkoutService, useValue: { workouts: () => [], update: vi.fn() } },
         { provide: ToastService, useValue: toast },
         {

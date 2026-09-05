@@ -3,14 +3,22 @@
   <div class="list-header">
     <div>
       <h1 class="page-title">Sets</h1>
-      <p class="page-subtitle">Reusable groups of exercises — add a whole session to a day in one go.</p>
+      <p class="page-subtitle">Save what you do once, then drop it onto a day or a whole week.</p>
+    </div>
+  </div>
+
+  <!-- Day sets -->
+  <div class="list-header section-header">
+    <div>
+      <h2 class="section-title">Day sets</h2>
+      <p class="page-subtitle">A single session — add it to any day in one go.</p>
     </div>
     <button class="btn btn-primary" id="add-set-btn" (click)="openModal()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round">
         <path d="M12 5v14M5 12h14" />
       </svg>
-      Create Set
+      New Day Set
     </button>
   </div>
 
@@ -73,7 +81,94 @@
       <span class="spinner"></span>
     </div>
   }
+
+  <!-- Week sets -->
+  <div class="list-header section-header">
+    <div>
+      <h2 class="section-title">Week sets</h2>
+      <p class="page-subtitle">A whole Mon–Sun plan — load it into any week in one go.</p>
+    </div>
+    <button class="btn btn-primary" id="add-week-set-btn" (click)="openWeekModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      New Week Set
+    </button>
+  </div>
+
+  @if (weekSets(); as list) {
+    <div class="set-list">
+      @for (w of list; track w.id) {
+        <div class="set-card glass-card">
+          <div class="set-card-head">
+            <div class="list-info">
+              <span class="list-name">{{ w.name }}</span>
+              @if (w.description) {
+                <p class="set-description">{{ w.description }}</p>
+              }
+            </div>
+            <div class="list-meta">
+              <div class="list-stats">
+                <span><strong>{{ w.days.length }}</strong> {{ w.days.length === 1 ? 'day' : 'days' }}</span>
+                <span><strong>{{ exerciseCount(w) }}</strong> {{ exerciseCount(w) === 1 ? 'exercise' : 'exercises' }}</span>
+              </div>
+              <div class="list-actions">
+                <button class="list-action" (click)="openWeekModal(w)" aria-label="Edit week set">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </button>
+                <button class="list-action list-delete" (click)="onDeleteWeek(w)" aria-label="Delete week set">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- One block per stored day. Rest days aren't stored, so the days
+               listed here are exactly the ones the week will fill. -->
+          <ul class="set-items">
+            @for (d of w.days; track d.day) {
+              <li class="week-set-day">
+                <span class="week-set-day-label">{{ dayLabels[d.day] }}</span>
+                <ul class="week-set-day-items">
+                  @for (item of d.items; track $index) {
+                    <li class="set-item">
+                      <span class="set-item-name">{{ item.workoutName }}</span>
+                      <span class="set-item-summary">{{ summaryOf(item) }}</span>
+                    </li>
+                  }
+                </ul>
+              </li>
+            } @empty {
+              <li class="text-muted">No days in this week set.</li>
+            }
+          </ul>
+        </div>
+      } @empty {
+        <div class="list-empty glass-card">
+          <p>
+            No week sets yet — log a week the way you like it, then hit "Save week as set"
+            on the Weeks page.
+          </p>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="list-loading">
+      <span class="spinner"></span>
+    </div>
+  }
 </section>
 
 <!-- Create / Edit Set builder -->
 <app-set-form-modal [open]="modalOpen()" [editingSet]="editingSet()" (close)="closeModal()" />
+
+<!-- The same builder in week mode -->
+<app-set-form-modal [open]="weekModalOpen()" mode="week" [editingWeekSet]="editingWeekSet()"
+  (close)="closeWeekModal()" />

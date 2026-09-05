@@ -50,3 +50,62 @@
     flex: 1;
   }
 }
+
+/* --- Week mode: the seven day sections --- */
+
+/* One flat list of blocks rendered grouped under these. A day with nothing on
+   it collapses to its header alone, so the whole week fits on one screen. */
+.week-days {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.week-day {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.week-day-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.week-day-head:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.week-day-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.week-day-open .week-day-chevron {
+  transform: rotate(90deg);
+}
+
+.week-day-label {
+  font-weight: 600;
+}
+
+.week-day-count {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.week-day-body {
+  padding: 0 0.9rem 0.9rem;
+}

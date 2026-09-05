@@ -1,4 +1,5 @@
-import { LoggedSet, WeekEntry } from './week.service';
+import { DAY_LABELS, LoggedSet, WeekEntry, bucketByDay } from './week.service';
+import { WeekSet, WeekSetDay } from './week-set.service';
 import { SetItem, WorkoutSet } from './workout-set.service';
 
 /**
@@ -50,11 +51,28 @@ export function entriesFromSet(
   dayEntries: WeekEntry[],
   bodyWeightLbs: number | null
 ): SetApplication {
+  return entriesFromItems(set.items, day, dayEntries, bodyWeightLbs);
+}
+
+/**
+ * The three rules above, applied to a bare list of items.
+ *
+ * Split out from {@link entriesFromSet} so a week set can reuse them a day at a
+ * time ({@link entriesFromWeekSet}) — and so the Weeks page can drop a single
+ * day *out* of a week set onto a column — without either re-deriving the
+ * collision guard or having to wrap its items in a fake `WorkoutSet`.
+ */
+export function entriesFromItems(
+  items: SetItem[],
+  day: number,
+  dayEntries: WeekEntry[],
+  bodyWeightLbs: number | null
+): SetApplication {
   const taken = new Set(dayEntries.map((entry) => entry.workoutId));
   const entries: Omit<WeekEntry, 'id' | 'createdAt'>[] = [];
   const skipped: string[] = [];
 
-  for (const item of set.items) {
+  for (const item of items) {
     if (taken.has(item.workoutId)) {
       skipped.push(item.workoutName);
       continue;
@@ -115,6 +133,74 @@ export function setItemsFromEntries(
     if (entry.cardio) item.cardio = entry.cardio;
     return item;
   });
+}
+
+/**
+ * The entries a saved **week** set becomes, across every day it covers.
+ *
+ * A thin loop over {@link entriesFromItems}, and the loop is the point: the
+ * collision guard is rebuilt **per day**, from that day's own entries. Sharing
+ * one `taken` set across the week would mean logging Bench Press on Monday
+ * silently swallowed the Thursday copy of it — which is the whole shape of an
+ * upper/lower split. The three rules of {@link entriesFromSet} otherwise apply
+ * unchanged, including body-weight items taking *today's* weigh-in on every day
+ * they appear.
+ *
+ * `skipped` names are qualified with the weekday (`"Bench Press (Mon)"`),
+ * because the same exercise can collide on more than one day and an unqualified
+ * list would repeat a name with no way to tell which day it meant.
+ *
+ * Days come back in weekday order, and each day's items in the set's own order,
+ * so one flat descending timestamp run over the result still orders every
+ * column correctly — see `WeekService.addMany`.
+ */
+export function entriesFromWeekSet(
+  weekSet: WeekSet,
+  weekEntries: WeekEntry[],
+  bodyWeightLbs: number | null
+): SetApplication {
+  const byDay = bucketByDay(weekEntries);
+  const entries: Omit<WeekEntry, 'id' | 'createdAt'>[] = [];
+  const skipped: string[] = [];
+
+  const days = [...weekSet.days].sort((a, b) => a.day - b.day);
+  for (const day of days) {
+    const applied = entriesFromItems(
+      day.items,
+      day.day,
+      byDay[day.day] ?? [],
+      bodyWeightLbs
+    );
+    entries.push(...applied.entries);
+    skipped.push(
+      ...applied.skipped.map((name) => `${name} (${DAY_LABELS[day.day]})`)
+    );
+  }
+
+  return { entries, skipped };
+}
+
+/**
+ * The inverse of {@link entriesFromWeekSet}: a whole logged week captured as a
+ * reusable week set — the "save this week as a set" flow.
+ *
+ * Rest days are **dropped, not stored empty** (see {@link WeekSetDay}), so a
+ * week with three sessions in it saves three days. Each day's items are
+ * captured by the same {@link setItemsFromEntries} the day flow uses, in the
+ * order that day's column shows them, which keeps the round trip stable.
+ */
+export function weekSetDaysFromEntries(
+  entries: WeekEntry[],
+  bodyWeightIds: ReadonlySet<string>
+): WeekSetDay[] {
+  const byDay = bucketByDay(entries);
+  const days: WeekSetDay[] = [];
+  for (let day = 0; day < byDay.length; day++) {
+    const dayEntries = byDay[day];
+    if (!dayEntries?.length) continue;
+    days.push({ day, items: setItemsFromEntries(dayEntries, bodyWeightIds) });
+  }
+  return days;
 }
 
 /** An item's sets, with a body-weight exercise's weight filled from the latest
