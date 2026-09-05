@@ -10,6 +10,22 @@ import { SetItem, WorkoutSet } from './workout-set.service';
  * `WeekService.addMany` does the writing; this decides *what* gets written.
  */
 
+/**
+ * An exercise's standing note, as carried into a session it didn't originate on
+ * — `Workout.note` and `Workout.noteCreatedAt`, narrowed to strings.
+ */
+export interface CarriedNote {
+  note: string;
+  noteCreatedAt: string;
+}
+
+/**
+ * Standing notes by `workoutId`, for filling in the exercises a set says nothing
+ * about. Optional everywhere it's accepted: an omitted lookup simply carries
+ * nothing, which is exactly how this behaved before notes could travel.
+ */
+export type NoteLookup = ReadonlyMap<string, CarriedNote>;
+
 /** The outcome of applying a set to a day. */
 export interface SetApplication {
   /** Entries to write, in the set's own item order. */
@@ -44,14 +60,18 @@ export interface SetApplication {
  *    template would quietly overwrite real progress. Editing the resulting
  *    entry afterwards goes through the normal path and *does* sync — which is
  *    the honest moment to do it.
+ *
+ * `notes` carries standing exercise notes in, per rule 4 in
+ * {@link entriesFromItems}.
  */
 export function entriesFromSet(
   set: WorkoutSet,
   day: number,
   dayEntries: WeekEntry[],
-  bodyWeightLbs: number | null
+  bodyWeightLbs: number | null,
+  notes?: NoteLookup
 ): SetApplication {
-  return entriesFromItems(set.items, day, dayEntries, bodyWeightLbs);
+  return entriesFromItems(set.items, day, dayEntries, bodyWeightLbs, notes);
 }
 
 /**
@@ -61,12 +81,25 @@ export function entriesFromSet(
  * time ({@link entriesFromWeekSet}) — and so the Weeks page can drop a single
  * day *out* of a week set onto a column — without either re-deriving the
  * collision guard or having to wrap its items in a fake `WorkoutSet`.
+ *
+ * There is a fourth rule, and it belongs to notes:
+ *
+ * 4. **The set's own note wins; a standing note only fills a blank.** A note
+ *    written into a set is a deliberate instruction about *this* routine
+ *    ("pause at the bottom"), so it outranks the exercise's standing note —
+ *    which is a running observation that happens to still be true. When the
+ *    item says nothing, `notes` supplies the carried note and the date it was
+ *    first written, so the session records where the text came from.
+ *
+ *    Nothing is written *back*: like rule 3, applying a set must not touch the
+ *    library. A set carrying a note is not the user re-asserting it today.
  */
 export function entriesFromItems(
   items: SetItem[],
   day: number,
   dayEntries: WeekEntry[],
-  bodyWeightLbs: number | null
+  bodyWeightLbs: number | null,
+  notes?: NoteLookup
 ): SetApplication {
   const taken = new Set(dayEntries.map((entry) => entry.workoutId));
   const entries: Omit<WeekEntry, 'id' | 'createdAt'>[] = [];
@@ -84,7 +117,7 @@ export function entriesFromItems(
       workoutId: item.workoutId,
       workoutName: item.workoutName,
       muscleGroup: item.muscleGroup,
-      notes: item.notes ?? '',
+      ...noteFor(item, notes),
     };
     entries.push(
       item.cardio
@@ -157,7 +190,8 @@ export function setItemsFromEntries(
 export function entriesFromWeekSet(
   weekSet: WeekSet,
   weekEntries: WeekEntry[],
-  bodyWeightLbs: number | null
+  bodyWeightLbs: number | null,
+  notes?: NoteLookup
 ): SetApplication {
   const byDay = bucketByDay(weekEntries);
   const entries: Omit<WeekEntry, 'id' | 'createdAt'>[] = [];
@@ -169,7 +203,8 @@ export function entriesFromWeekSet(
       day.items,
       day.day,
       byDay[day.day] ?? [],
-      bodyWeightLbs
+      bodyWeightLbs,
+      notes
     );
     entries.push(...applied.entries);
     skipped.push(
@@ -201,6 +236,26 @@ export function weekSetDaysFromEntries(
     days.push({ day, items: setItemsFromEntries(dayEntries, bodyWeightIds) });
   }
   return days;
+}
+
+/**
+ * The note an applied item logs with, and where it came from — rule 4 of
+ * {@link entriesFromItems}.
+ *
+ * A set's own note carries **no** origin date (`''`): the set doesn't record
+ * when its note was written, and dating it to today would be a guess dressed as
+ * a fact. Only a carried note has a real first-written date to report.
+ */
+function noteFor(
+  item: SetItem,
+  notes: NoteLookup | undefined
+): { notes: string; noteCreatedAt: string } {
+  const own = item.notes ?? '';
+  if (own) return { notes: own, noteCreatedAt: '' };
+  const carried = notes?.get(item.workoutId);
+  return carried?.note
+    ? { notes: carried.note, noteCreatedAt: carried.noteCreatedAt }
+    : { notes: '', noteCreatedAt: '' };
 }
 
 /** An item's sets, with a body-weight exercise's weight filled from the latest

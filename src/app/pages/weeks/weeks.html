@@ -182,6 +182,11 @@
           <textarea class="form-input form-textarea" id="week-notes" rows="3" maxlength="500"
             placeholder="How did it go?" [ngModel]="modalNotes()"
             (ngModelChange)="modalNotes.set($event)" name="notes"></textarea>
+          <!-- Only for a note with history behind it. Dating one written today
+               would be noise; dating one carried in from March is the point. -->
+          @if (noteOriginLabel()) {
+            <p class="form-hint">First noted {{ noteOriginLabel() }} · carries over to your next session.</p>
+          }
         </div>
       }
     }

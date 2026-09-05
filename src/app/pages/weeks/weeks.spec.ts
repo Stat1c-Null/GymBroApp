@@ -41,6 +41,8 @@ interface WeeksView {
   toggleModalNotes: () => void;
   modalHasNotes: () => boolean;
   modalNotes: WritableSignal<string>;
+  modalNoteCreatedAt: WritableSignal<string>;
+  noteOriginLabel: () => string;
   onWorkoutCreated: (workout: Workout) => void;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
@@ -178,6 +180,7 @@ describe('WeeksComponent', () => {
     rangeLabel: () => string;
     isCurrentWeek: () => boolean;
     currentWeekStart: () => Date;
+    weekId: () => string;
     today: () => Date;
     previousWeek: ReturnType<typeof vi.fn>;
     nextWeek: ReturnType<typeof vi.fn>;
@@ -194,9 +197,13 @@ describe('WeeksComponent', () => {
   let savedWeekSets: WeekSet[];
   let weekSetService: { weekSets: () => WeekSet[] | undefined };
   let toast: { show: ReturnType<typeof vi.fn> };
+  /** The exercise library the page sees. A `let` rather than a constant so a
+   *  test can give an exercise a standing note before rendering. */
+  let workoutsData: Workout[];
   let workoutService: {
     workouts: () => Workout[];
     update: ReturnType<typeof vi.fn>;
+    setNote: ReturnType<typeof vi.fn>;
   };
   let weighIns: WritableSignal<WeightEntry[] | undefined>;
   let weightService: { weights: () => WeightEntry[] | undefined };
@@ -212,6 +219,7 @@ describe('WeeksComponent', () => {
       rangeLabel: () => 'Jun 16 – Jun 22, 2026',
       isCurrentWeek: () => true,
       currentWeekStart: () => new Date(2026, 5, 15),
+      weekId: () => '2026-06-15',
       today: () => new Date(2026, 5, 17),
       previousWeek: vi.fn(),
       nextWeek: vi.fn(),
@@ -224,14 +232,16 @@ describe('WeeksComponent', () => {
     setService = { sets: () => savedSets };
     weekSetService = { weekSets: () => savedWeekSets };
     toast = { show: vi.fn() };
+    workoutsData = [
+      SAMPLE_WORKOUT,
+      ORPHAN_WORKOUT,
+      CARDIO_WORKOUT,
+      BODYWEIGHT_WORKOUT,
+    ];
     workoutService = {
-      workouts: () => [
-        SAMPLE_WORKOUT,
-        ORPHAN_WORKOUT,
-        CARDIO_WORKOUT,
-        BODYWEIGHT_WORKOUT,
-      ],
+      workouts: () => workoutsData,
       update: vi.fn().mockResolvedValue(undefined),
+      setNote: vi.fn().mockResolvedValue(undefined),
     };
     // A signal so a test can land the log *after* the modal is already open,
     // the way the live Firestore stream does.
@@ -330,6 +340,7 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [
         { reps: 10, weight: 60, time: null },
@@ -429,6 +440,7 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       notes: '',
+      noteCreatedAt: '',
       trackTime: true,
       sets: [{ reps: 8, weight: 60, time: 90 }],
     });
@@ -450,6 +462,7 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [{ reps: 8, weight: 60, time: null }],
     });
@@ -501,6 +514,7 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [{ reps: 12, weight: 60, time: null }],
     });
@@ -531,6 +545,7 @@ describe('WeeksComponent', () => {
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
       notes: '',
+      noteCreatedAt: '',
       trackTime: true,
       sets: [{ reps: 10, weight: 60, time: 90 }],
     });
@@ -653,6 +668,7 @@ describe('WeeksComponent', () => {
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
         notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: { time: 1800, distance: 5, heartRate: 150, elevation: 200 },
       });
@@ -678,6 +694,7 @@ describe('WeeksComponent', () => {
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
         notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: {
           time: 1800,
@@ -744,6 +761,7 @@ describe('WeeksComponent', () => {
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
         notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: { time: 1800, distance: 6, heartRate: null, elevation: null },
       });
@@ -778,6 +796,7 @@ describe('WeeksComponent', () => {
         workoutName: 'Pull-ups',
         muscleGroup: 'Back',
         notes: '',
+        noteCreatedAt: '',
         trackTime: false,
         sets: [
           { reps: 8, weight: 176.4, time: null },
@@ -950,6 +969,203 @@ describe('WeeksComponent', () => {
         'noted',
         expect.objectContaining({ notes: '' })
       );
+    });
+
+    it('seeds a fresh log from the exercise’s standing note, toggle already on', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+
+      expect(view.modalHasNotes()).toBe(true);
+      expect(view.modalNotes()).toBe('Shoulder clicks');
+      expect(view.modalNoteCreatedAt()).toBe('2026-03-04');
+    });
+
+    it('clears a seeded note when a different exercise is picked', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onWorkoutChange('w2'); // no standing note of its own
+
+      expect(view.modalHasNotes()).toBe(false);
+      expect(view.modalNotes()).toBe('');
+      expect(view.modalNoteCreatedAt()).toBe('');
+    });
+
+    it('keeps the original date when a carried note is logged again weeks later', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(3); // Thursday of the viewed week
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notes: 'Shoulder clicks',
+          noteCreatedAt: '2026-03-04',
+        })
+      );
+    });
+
+    it('dates a brand-new note to the session it describes, not to today', async () => {
+      // The viewed week starts Mon 2026-06-15; today is Wed the 17th. A note
+      // written on Monday's entry must date to Monday.
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ noteCreatedAt: '2026-06-15' })
+      );
+    });
+
+    it('pushes a new note onto the exercise so the next session carries it', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith(
+        'w1',
+        'Tweaked the setup',
+        '2026-06-15'
+      );
+    });
+
+    it('writes nothing to the library when a carried note is logged unchanged', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first-written date when a carried note is revised', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.modalNotes.set('Shoulder clicks, but less');
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith(
+        'w1',
+        'Shoulder clicks, but less',
+        '2026-03-04'
+      );
+    });
+
+    it('clears the standing note when the toggle is switched off', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes(); // seeded on, now off
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith('w1', '', '');
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: '', noteCreatedAt: '' })
+      );
+    });
+
+    it('says so in the toast when a note is saved or cleared', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(toast.show).toHaveBeenCalledWith(
+        expect.stringContaining('Note saved to Bench Press for next time.'),
+        'success'
+      );
+    });
+
+    it('keeps the log and its toast when the library note write fails', async () => {
+      workoutService.setNote.mockRejectedValueOnce(new Error('offline'));
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+    });
+
+    it('seeds an edited entry from the entry, not the exercise’s current note', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Revised since', noteCreatedAt: '2026-05-01' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2026-04-02' });
+
+      expect(view.modalNotes()).toBe('Felt strong');
+      expect(view.modalNoteCreatedAt()).toBe('2026-04-02');
+    });
+
+    it('labels a note with the date it was first written', () => {
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2026-03-04' });
+
+      expect(view.noteOriginLabel()).toBe('Mar 4');
+    });
+
+    it('includes the year on a note carried over from a previous year', () => {
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2025-11-20' });
+
+      expect(view.noteOriginLabel()).toBe('Nov 20, 2025');
     });
 
     it('saves a note on a cardio session too', async () => {

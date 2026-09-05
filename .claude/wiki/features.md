@@ -101,9 +101,9 @@ free-text note on the session, stored as `WeekEntry.notes`. It looks like the
 time-tracking toggle but differs from it in three ways worth remembering:
 
 - **No global default.** There is no `showNotes` setting — the toggle starts off
-  on every new entry, because a note is occasional rather than a standing
-  preference. On edit it re-derives from the entry (`!!entry.notes`), so opening
-  a noted workout shows the toggle already on with the text seeded.
+  on a new entry *unless the exercise has a standing note*, in which case picking
+  it turns the toggle on and fills the text (see below). On edit it re-derives
+  from the entry (`!!entry.notes`).
 - **It applies to cardio too**, so `notes` is built into the shared `base`
   object in `onSubmit`, not the strength-only branch that carries `trackTime`.
 - **Turning it off saves `''`, not nothing** — see
@@ -114,6 +114,36 @@ The note renders under the sets summary in `WeekGridComponent`
 (`.day-entry-notes`), clamped to three lines — two in the `compact` friend
 strip — with the full text on the element's `title` and always in the edit
 modal. Because the grid is shared, **an accepted friend sees your notes**.
+
+#### Notes carry over
+
+A note follows the **exercise**, not the day. Write "shoulder still clicking" on
+Bench Press one Tuesday and it is already in the form the next time Bench Press
+is logged, however many weeks later — seeded in `onWorkoutChange`, the same hook
+that re-seeds the set weights, so picking an exercise brings forward both what
+you usually lift and what you last said about it.
+
+Four rules make that safe, and each is enforced in one place:
+
+- **Editing the text revises the note going forward**; the session you just
+  saved keeps exactly what you typed. `WeeksComponent.syncWorkoutNote` pushes it
+  back to the library after the log is saved — the same position and shape as
+  `syncUsualWeight`, including never failing the log if the library write does.
+- **The original date is kept** through every revision and every carry-over, and
+  a brand-new note is dated to the *session* it describes rather than to today,
+  so annotating a past week dates the note to that week. The modal shows it
+  ("First noted Mar 4 · carries over to your next session"), and a note that was
+  carried in gets a small `.day-entry-note-origin` line in the grid — one written
+  on the day it sits on doesn't, since that would only restate the column.
+- **Turning the toggle off clears it**, which is how carry-over is switched off;
+  there is no separate control. Editing an *old* session clears it too, so the
+  toast says so ("Note cleared from Bench Press.").
+- **Past sessions never change.** Each holds its own snapshot in `WeekEntry.notes`
+  and nothing rewrites it, so a deleted note stays on every workout it was
+  applied to. See [Database → Note carry-over](./database.md#note-carry-over).
+
+Applying a saved set carries notes too, with the set's own note winning over the
+standing one — [Workout Sets](#workout-sets-reusable-days-and-weeks).
 
 Duplicate-guard: logging the same workout twice on the same day (outside of
 editing that same entry) is rejected client-side before the write.

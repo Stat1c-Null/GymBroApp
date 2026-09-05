@@ -2,7 +2,13 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { SettingsService } from '../../services/settings.service';
 import { entrySummary } from '../../services/entry-summary';
-import { DAY_LABELS, WeekEntry, bucketByDay, toWeekId } from '../../services/week.service';
+import {
+  DAY_LABELS,
+  WeekEntry,
+  bucketByDay,
+  formatDayId,
+  toWeekId,
+} from '../../services/week.service';
 
 /** One day column's header data. */
 interface DayColumn {
@@ -80,5 +86,19 @@ export class WeekGridComponent {
       weight: this.settings.unit(),
       distance: this.settings.distanceUnit(),
     });
+  }
+
+  /**
+   * "Jun 16" for a note that was **carried into** this session, or '' for one
+   * written on it — which is also the template's test for showing the date.
+   *
+   * A note dated the same day as the entry it sits on says nothing a reader
+   * can't already see from the column it's in. A note dated three weeks earlier
+   * says the thing worth knowing: this is still going on.
+   */
+  protected noteOrigin(entry: WeekEntry): string {
+    const created = entry.noteCreatedAt;
+    if (!created || created === entry.date) return '';
+    return formatDayId(created, this.today());
   }
 }

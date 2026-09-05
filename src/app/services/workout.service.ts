@@ -69,6 +69,29 @@ export interface Workout {
    * way {@link CARDIO_GROUP} workouts do.
    */
   bodyWeight?: boolean;
+  /**
+   * The exercise's **standing note** — carried into the next session of it,
+   * however many weeks later that is. Picking this exercise in the log modal
+   * seeds the note field from here; saving with the note toggle off clears it.
+   *
+   * This is the note's *live* home, not its archive. Every logged session keeps
+   * its own copy in {@link WeekEntry.notes}, so clearing this can never reach
+   * backwards and erase what a past session said — see
+   * `.claude/wiki/database.md` → Workout notes.
+   *
+   * Optional: exercises saved before this field existed simply lack it, which
+   * reads the same as '' — no migration, same as {@link Workout.bodyWeight}.
+   */
+  note?: string;
+  /**
+   * The local `YYYY-MM-DD` the note was **first** written, held across every
+   * later revision — "I've been working around this shoulder since June" is the
+   * fact worth keeping, and a date that reset on every edit couldn't say it.
+   *
+   * It is the logical date of the *session the note was written on*, not the
+   * day it was typed, so annotating a past week dates the note to that week.
+   */
+  noteCreatedAt?: string;
   createdAt?: unknown; // Firestore serverTimestamp
 }
 
@@ -153,6 +176,30 @@ export class WorkoutService {
     const uid = this.auth.requireUid('edit a workout');
     await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
       ...data,
+    });
+  }
+
+  /**
+   * Set — or clear — the exercise's standing note, touching nothing else on the
+   * document.
+   *
+   * Deliberately **not** routed through {@link update}, which takes a whole
+   * workout. This runs straight after the Weeks page may have written a new
+   * `usualWeight`, and a full-document write built from the caller's copy of the
+   * workout would revert it. `stageGroupReassign` writes one field the same way.
+   *
+   * Clearing writes `''` rather than deleting the fields: `updateDoc` ignores a
+   * key that isn't in the payload, so an omission could never clear a note.
+   */
+  async setNote(
+    id: string,
+    note: string,
+    noteCreatedAt: string
+  ): Promise<void> {
+    const uid = this.auth.requireUid('save a workout note');
+    await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
+      note,
+      noteCreatedAt,
     });
   }
 

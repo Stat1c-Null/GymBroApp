@@ -58,6 +58,12 @@
               <span class="day-entry-sets">{{ summaryOf(e) }}</span>
               @if (e.notes) {
                 <p class="day-entry-notes" [title]="e.notes">{{ e.notes }}</p>
+                <!-- Outside the clamped note above, not inside it: a chatty note
+                     would clip its own provenance away. Only carried notes have
+                     one — see `noteOrigin`. -->
+                @if (noteOrigin(e); as since) {
+                  <span class="day-entry-note-origin">Noted {{ since }}</span>
+                }
               }
             </div>
           } @empty {

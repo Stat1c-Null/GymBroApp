@@ -39,6 +39,7 @@ import {
   rowsToLoggedSets,
 } from '../../services/set-rows';
 import {
+  NoteLookup,
   SetApplication,
   entriesFromItems,
   entriesFromSet,
@@ -62,6 +63,8 @@ import {
   CardioLog,
   DAY_LABELS,
   bucketByDay,
+  entryDate,
+  formatDayId,
   uniformWeight,
 } from '../../services/week.service';
 
@@ -116,6 +119,23 @@ export class WeeksComponent {
 
   /** The note text for the open modal. */
   protected readonly modalNotes = signal('');
+
+  /**
+   * When the note in the open modal was **first** written (local `YYYY-MM-DD`),
+   * or '' for one with no history — seeded from the exercise's standing note
+   * when adding, from the entry itself when editing.
+   *
+   * Held across edits to the text on purpose: revising a note doesn't make it a
+   * new note, and "I've been working around this since June" is the part worth
+   * keeping. A blank one is dated on save, to the session it describes.
+   */
+  protected readonly modalNoteCreatedAt = signal('');
+
+  /** "Jun 16" for the note in the modal, or '' when it has no history to show —
+   *  which is also the template's test for whether to show the hint at all. */
+  protected readonly noteOriginLabel = computed(() =>
+    formatDayId(this.modalNoteCreatedAt(), this.service.today())
+  );
 
   protected readonly unit = this.settings.unit;
 
@@ -218,6 +238,27 @@ export class WeeksComponent {
   protected readonly applying = signal(false);
   protected readonly savedSets = this.setService.sets;
 
+  /**
+   * Every exercise's standing note, by id — what an applied set fills its blank
+   * notes from (rule 4 in `entriesFromItems`).
+   *
+   * Built from the library stream the page already subscribes to, so carry-over
+   * costs no extra reads. Exercises with no note are left out rather than mapped
+   * to '', keeping the lookup a set of things that actually have something to
+   * say.
+   */
+  private readonly carriedNotes = computed<NoteLookup>(() => {
+    const notes = new Map<string, { note: string; noteCreatedAt: string }>();
+    for (const workout of this.workoutService.workouts() ?? []) {
+      if (!workout.id || !workout.note) continue;
+      notes.set(workout.id, {
+        note: workout.note,
+        noteCreatedAt: workout.noteCreatedAt ?? '',
+      });
+    }
+    return notes;
+  });
+
   /** The "+" no longer opens the logging form directly: it asks which of the
    *  two ways to fill a day the user means. */
   protected openAddChoice(day: number): void {
@@ -250,7 +291,8 @@ export class WeeksComponent {
       set,
       day,
       this.entriesByDay()[day] ?? [],
-      this.latestWeighIn()?.lbs ?? null
+      this.latestWeighIn()?.lbs ?? null,
+      this.carriedNotes()
     );
     await this.commitApplied(
       applied,
@@ -296,7 +338,8 @@ export class WeeksComponent {
       dayOfSet.items,
       day,
       this.entriesByDay()[day] ?? [],
-      this.latestWeighIn()?.lbs ?? null
+      this.latestWeighIn()?.lbs ?? null,
+      this.carriedNotes()
     );
     await this.commitApplied(
       applied,
@@ -332,7 +375,8 @@ export class WeeksComponent {
     const applied = entriesFromWeekSet(
       weekSet,
       this.entries() ?? [],
-      this.latestWeighIn()?.lbs ?? null
+      this.latestWeighIn()?.lbs ?? null,
+      this.carriedNotes()
     );
     await this.commitApplied(
       applied,
@@ -451,6 +495,7 @@ export class WeeksComponent {
     this.resetCardioFields();
     this.modalHasNotes.set(false);
     this.modalNotes.set('');
+    this.modalNoteCreatedAt.set('');
     this.error.set('');
     this.showModal.set(true);
   }
@@ -475,8 +520,13 @@ export class WeeksComponent {
     }
     // Seeded outside the cardio/strength split above: a note belongs to either
     // kind of session.
+    //
+    // From the **entry**, never from the exercise's current standing note: this
+    // is history. Opening a session from June must show what it said in June,
+    // even if the note has since been revised or cleared.
     this.modalNotes.set(entry.notes ?? '');
     this.modalHasNotes.set(!!entry.notes);
+    this.modalNoteCreatedAt.set(entry.noteCreatedAt ?? '');
     this.error.set('');
     this.showModal.set(true);
   }
@@ -509,6 +559,9 @@ export class WeeksComponent {
     this.showCreateWorkout.set(false);
     this.modalMuscleGroup.set(workout.muscleGroup);
     this.modalWorkoutId.set(workout.id ?? '');
+    // A brand-new exercise has no standing note, so this clears any the
+    // previously-selected one had seeded in.
+    this.seedNote(workout);
     if (workout.muscleGroup === CARDIO_GROUP) {
       this.rowPool = [];
       this.setRows.set([]);
@@ -524,10 +577,15 @@ export class WeeksComponent {
     this.rowPool = [];
     this.setRows.set([]);
     this.resetCardioFields();
+    // The note belonged to the exercise that just got deselected.
+    this.seedNote(null);
   }
 
   protected onWorkoutChange(id: string): void {
     this.modalWorkoutId.set(id);
+    // Above the cardio bail-out below, because a note belongs to a cardio
+    // session as much as to a lifting one.
+    this.seedNote(this.selectedWorkout());
     if (this.isCardio()) {
       this.resetCardioFields();
       return;
@@ -594,12 +652,20 @@ export class WeeksComponent {
     // '' rather than omitted: `update` uses `updateDoc`, which ignores a missing
     // key — leaving a note the user just cleared sitting in the document.
     const notes = this.modalHasNotes() ? this.modalNotes().trim() : '';
+    // A note keeps the date it was FIRST written, through every later revision
+    // and into every session it carries forward to. Only one with no history
+    // starts today — dated to the *session* it describes rather than the moment
+    // it was typed, so annotating a past week dates the note to that week.
+    const noteCreatedAt = notes
+      ? this.modalNoteCreatedAt() || entryDate(this.service.weekId(), day)
+      : '';
     const base = {
       day,
       workoutId: workout.id,
       workoutName: workout.name,
       muscleGroup: workout.muscleGroup,
       notes,
+      noteCreatedAt,
     };
     const data: Omit<WeekEntry, 'id' | 'createdAt'> = cardio
       ? { ...base, sets: [], cardio }
@@ -617,8 +683,9 @@ export class WeeksComponent {
       } else {
         await this.service.add(data);
       }
+      const weighed = await this.syncUsualWeight(workout, data.sets, baseMessage);
       this.toast.show(
-        await this.syncUsualWeight(workout, data.sets, baseMessage),
+        await this.syncWorkoutNote(workout, notes, noteCreatedAt, weighed),
         'success'
       );
       this.closeModal();
@@ -668,6 +735,46 @@ export class WeeksComponent {
     }
   }
 
+  /**
+   * After a log save, make the exercise's standing note match what was just
+   * logged — so the next session of it opens with the note already there.
+   * Returns the toast message to show, with a suffix when the library changed.
+   *
+   * Three things are deliberate here:
+   *
+   * - **Unchanged text writes nothing.** The common case is a carried note
+   *   logged again untouched, which must not cost a write on every save.
+   * - **An empty note clears the library's**, which is how carry-over is turned
+   *   off (there is no separate control). Past entries are untouched: each one
+   *   holds its own copy, and nothing here reaches backwards. That includes
+   *   clearing the note while editing an *old* session — the suffix says so out
+   *   loud, because it is the one place this can surprise.
+   * - **Only the note fields are written.** {@link WorkoutService.setNote} does a
+   *   targeted update rather than going through `update()`, which takes a whole
+   *   workout: {@link syncUsualWeight} may have just written a new usual weight,
+   *   and a full-document write built from this component's stale copy would
+   *   revert it.
+   *
+   * A failed library write leaves the already-saved log entry and its toast
+   * alone, exactly as the usual-weight sync does.
+   */
+  private async syncWorkoutNote(
+    workout: Workout,
+    notes: string,
+    noteCreatedAt: string,
+    baseMessage: string
+  ): Promise<string> {
+    if (notes === (workout.note ?? '')) return baseMessage;
+    try {
+      await this.workoutService.setNote(workout.id!, notes, noteCreatedAt);
+      return notes
+        ? `${baseMessage} Note saved to ${workout.name} for next time.`
+        : `${baseMessage} Note cleared from ${workout.name}.`;
+    } catch {
+      return baseMessage;
+    }
+  }
+
   protected async onDelete(entry: WeekEntry): Promise<void> {
     if (!entry.id) return;
     if (!confirm(`Delete ${entry.workoutName}? This can't be undone.`)) return;
@@ -689,6 +796,22 @@ export class WeeksComponent {
     return workout.bodyWeight
       ? bodyWeightSeed(this.latestWeighIn(), this.settings.unit())
       : canonicalSeed(workout.usualWeight, this.settings.unit());
+  }
+
+  /**
+   * Seed the modal's note from an exercise's standing note — the carry-over
+   * itself, and the mirror image of {@link weightSeedFor}: picking an exercise
+   * brings forward both what you usually lift and what you last said about it.
+   *
+   * The toggle follows the text, so a carried note arrives already open (there
+   * is nothing to reveal on an exercise with no note). `null` clears, which is
+   * the same operation with nothing to seed from.
+   */
+  private seedNote(workout: Workout | null): void {
+    const note = workout?.note ?? '';
+    this.modalNotes.set(note);
+    this.modalNoteCreatedAt.set(note ? workout?.noteCreatedAt ?? '' : '');
+    this.modalHasNotes.set(!!note);
   }
 
   /** Re-seed every pooled row's weight (e.g. the selected workout changed),

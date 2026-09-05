@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NoteLookup,
   entriesFromSet,
   entriesFromWeekSet,
   setItemsFromEntries,
@@ -36,6 +37,18 @@ function entry(overrides: Partial<WeekEntry> = {}): WeekEntry {
     sets: [{ reps: 10, weight: 135, time: null }],
     ...overrides,
   };
+}
+
+/** Standing exercise notes, as the Weeks page builds them from the library. */
+function notes(
+  entries: Record<string, [note: string, created: string]>
+): NoteLookup {
+  return new Map(
+    Object.entries(entries).map(([id, [note, noteCreatedAt]]) => [
+      id,
+      { note, noteCreatedAt },
+    ])
+  );
 }
 
 describe('entriesFromSet', () => {
@@ -387,5 +400,115 @@ describe('weekSetDaysFromEntries', () => {
     expect(entries[0].notes).toBe('felt good');
     expect(entries[1].trackTime).toBe(true);
     expect(entries[2].muscleGroup).toBe('Legs');
+  });
+});
+
+describe('carrying standing notes into an applied set', () => {
+  it('fills a blank item note from the exercise’s standing note, with its date', () => {
+    const set = savedSet([item({ notes: '' })]);
+
+    const { entries } = entriesFromSet(
+      set,
+      0,
+      [],
+      null,
+      notes({ w1: ['Shoulder still clicking', '2026-03-04'] })
+    );
+
+    expect(entries[0].notes).toBe('Shoulder still clicking');
+    expect(entries[0].noteCreatedAt).toBe('2026-03-04');
+  });
+
+  it('lets the set’s own note win over the standing one', () => {
+    const set = savedSet([item({ notes: 'pause at the bottom' })]);
+
+    const { entries } = entriesFromSet(
+      set,
+      0,
+      [],
+      null,
+      notes({ w1: ['Shoulder still clicking', '2026-03-04'] })
+    );
+
+    expect(entries[0].notes).toBe('pause at the bottom');
+    // The set records no date for its own note, so claiming one would be a
+    // guess — see `noteFor`.
+    expect(entries[0].noteCreatedAt).toBe('');
+  });
+
+  it('carries nothing when the lookup is omitted, exactly as before', () => {
+    const set = savedSet([item({ notes: '' })]);
+
+    const { entries } = entriesFromSet(set, 0, [], null);
+
+    expect(entries[0].notes).toBe('');
+    expect(entries[0].noteCreatedAt).toBe('');
+  });
+
+  it('ignores an exercise the lookup has nothing for', () => {
+    const set = savedSet([
+      item({ workoutId: 'w1', notes: '' }),
+      item({ workoutId: 'w2', workoutName: 'Dips', notes: '' }),
+    ]);
+
+    const { entries } = entriesFromSet(
+      set,
+      0,
+      [],
+      null,
+      notes({ w1: ['Shoulder still clicking', '2026-03-04'] })
+    );
+
+    expect(entries[0].notes).toBe('Shoulder still clicking');
+    expect(entries[1].notes).toBe('');
+    expect(entries[1].noteCreatedAt).toBe('');
+  });
+
+  it('carries a note onto a cardio item too', () => {
+    const set = savedSet([
+      item({
+        workoutId: 'w5',
+        workoutName: 'Morning Run',
+        muscleGroup: 'Cardio',
+        notes: '',
+        sets: [],
+        cardio: { time: 1800, distance: 3, heartRate: null, elevation: null },
+      }),
+    ]);
+
+    const { entries } = entriesFromSet(
+      set,
+      0,
+      [],
+      null,
+      notes({ w5: ['Knee twinges after mile 3', '2026-01-09'] })
+    );
+
+    expect(entries[0].notes).toBe('Knee twinges after mile 3');
+    expect(entries[0].noteCreatedAt).toBe('2026-01-09');
+  });
+
+  it('carries notes across every day of a week set', () => {
+    const set = weekSet([
+      { day: 0, items: [item({ workoutId: 'w1', notes: '' })] },
+      {
+        day: 3,
+        items: [item({ workoutId: 'w1', workoutName: 'Bench Press', notes: '' })],
+      },
+    ]);
+
+    const { entries } = entriesFromWeekSet(
+      set,
+      [],
+      null,
+      notes({ w1: ['Shoulder still clicking', '2026-03-04'] })
+    );
+
+    // The same standing note on both days — the collision guard is per-day, so
+    // Monday's Bench doesn't swallow Thursday's.
+    expect(entries.map((e) => [e.day, e.notes])).toEqual([
+      [0, 'Shoulder still clicking'],
+      [3, 'Shoulder still clicking'],
+    ]);
   });
 });

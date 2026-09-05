@@ -145,6 +145,16 @@
   overflow: hidden;
 }
 
+/* When a note was first written, for one carried in from an earlier session.
+   Its own line rather than a suffix inside .day-entry-notes, which is clamped —
+   a three-line note would otherwise clip the date off the end. */
+.day-entry-note-origin {
+  font-size: 0.68rem;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
 .day-empty {
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -192,6 +202,13 @@
 :host(.compact) .day-entry-notes {
   -webkit-line-clamp: 2;
   line-clamp: 2;
+}
+
+/* Dropped entirely in the strip. At a fixed 15rem, a line spent on a note's
+   provenance is a line not spent on the workouts themselves; the full grid
+   still shows it. */
+:host(.compact) .day-entry-note-origin {
+  display: none;
 }
 
 :host(.compact) .list-loading {

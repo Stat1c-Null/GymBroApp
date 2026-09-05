@@ -93,6 +93,8 @@ The user's exercise library (`WorkoutService`). Shape (`Workout`):
   maxWeight: number | null;
   bodyWeight?: boolean;         // exercise loaded by the user's own body weight;
                                  // when true both weights above are null — see below
+  note?: string;                // standing note, carried into the next session
+  noteCreatedAt?: string;       // local YYYY-MM-DD it was FIRST written
   createdAt: Timestamp;         // serverTimestamp()
 }
 ```
@@ -222,7 +224,15 @@ rules, each of which had an obvious-but-wrong alternative:
    write-back (`WeeksComponent.syncUsualWeight`) is deliberately skipped: a set's
    weights are an intention, not what was lifted, and a stale template would
    quietly overwrite real progress. Editing the resulting entry afterwards goes
-   through the normal path and *does* sync.
+   through the normal path and *does* sync. The note write-back is skipped for
+   the same reason — a set carrying a note is not the user re-asserting it today.
+4. **The set's own note wins; a standing note only fills a blank.** The optional
+   `NoteLookup` fifth argument carries
+   [standing exercise notes](#note-carry-over) in, so applying a set to a day
+   brings forward what you last said about each exercise. A note written into the
+   set itself outranks it. `entriesFromItems` is the one place this is decided,
+   so the day, week and single-day-of-a-week flows can't disagree; omit the
+   lookup and nothing is carried, exactly as before the feature existed.
 
 `setItemsFromEntries` is the inverse, backing "save this day as a set".
 
@@ -375,6 +385,8 @@ Shape (`WeekEntry`):
   muscleGroup: string;         // denormalized copy — see below
   trackTime?: boolean;         // per-entry override of the global showSetTime setting
   notes?: string;              // free-text note; always written, '' when none — see below
+  noteCreatedAt?: string;      // local YYYY-MM-DD that note was FIRST written; '' when
+                               // written on this session — see Note carry-over
   sets: {
     reps: number | null;
     weight: number | null;
@@ -412,6 +424,56 @@ in the payload — so omitting `notes` could never *clear* a note the user just
 removed, and Firestore rejects `undefined` outright. Readers treat `''` and a
 missing field alike, so entries logged before the field existed need no
 migration, same as `trackTime`.
+
+#### Note carry-over
+
+A note doesn't stay on the session it was written on. It lives on the
+**exercise** ([`Workout.note`](#usersuidworkoutsworkoutid)) and is seeded into
+the log modal every time that exercise is picked — so a note written on Tuesday
+of one week is already there when the same workout comes round on Thursday of
+the next.
+
+Two fields, in two places, doing two different jobs:
+
+| Field | Where | What it is |
+|---|---|---|
+| `Workout.note` | the exercise | the **live** note — one per exercise, seeded on pick, overwritten on save |
+| `Workout.noteCreatedAt` | the exercise | local `YYYY-MM-DD` it was **first** written, held across revisions |
+| `WeekEntry.notes` | the session | a **snapshot** — what the note said on that day, never rewritten |
+| `WeekEntry.noteCreatedAt` | the session | where that snapshot came from; `''` when written on this session |
+
+The split is the whole feature, and it is what makes deletion safe: **clearing a
+note cannot reach backwards**. `Workout.note` is the only thing that changes;
+every session that already logged the note keeps its own copy, and re-opening one
+shows what it said then, not what the exercise says now.
+
+So there is deliberately **no separate "stop carrying this" control**: turning
+the note toggle off in the log modal and saving clears the exercise's note. That
+applies when editing an *old* session too — which is the one surprising case, so
+the toast says it out loud ("Note cleared from Bench Press.").
+
+`WeeksComponent.syncWorkoutNote` does the write-back, positioned and shaped like
+`syncUsualWeight`: after the log is saved, never failing it, and skipped entirely
+when the text is unchanged — the common case is a carried note logged again
+untouched, which must not cost a write. It calls **`WorkoutService.setNote`**,
+not `update`: `syncUsualWeight` may have just written a new `usualWeight`, and a
+whole-document write built from the component's stale copy would revert it.
+
+**Dates are the session's, not the clock's.** A new note is stamped with
+`entryDate(weekId, day)` — the day it describes — so annotating last Tuesday
+dates the note to last Tuesday. Revising a carried note keeps the original date:
+"I've been working around this since June" is the fact worth keeping, and a date
+that reset on every edit couldn't state it.
+
+Both fields are optional and both are written as `''` rather than omitted, for
+exactly the reason `notes` is. Exercises and entries that predate them need no
+migration.
+
+Applying a **saved set** carries notes too, but the set's own
+[`SetItem.notes`](#usersuidworkoutsetssetid) wins — a note written into a routine
+("pause at the bottom") is a deliberate instruction and outranks a standing
+observation. A blank item note is filled from the exercise's. See
+[Applying a set to a day](#applying-a-set-to-a-day), rule 4.
 
 ### Cross-week analytics reads (the exception)
 

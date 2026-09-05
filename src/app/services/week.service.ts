@@ -107,6 +107,17 @@ export interface WeekEntry {
    *  (Firestore also rejects `undefined` outright.) Entries logged before this
    *  field simply lack it, which reads the same as ''. */
   notes?: string;
+  /**
+   * The local `YYYY-MM-DD` the note in {@link notes} was **originally** written,
+   * copied from {@link Workout.noteCreatedAt} when a standing note is carried
+   * into this session. `''` for a note first written on this entry, and for an
+   * entry with no note at all.
+   *
+   * Written under the same always-write-`''` rule as {@link notes}, and for the
+   * same reason: `updateDoc` ignores a missing key, so omitting it could never
+   * clear the date of a note the user just removed.
+   */
+  noteCreatedAt?: string;
   sets: LoggedSet[]; // length = number of sets; [] for cardio entries
   /** Present only when `muscleGroup` is the reserved Cardio category. */
   cardio?: CardioLog;
@@ -168,6 +179,23 @@ export function entryDate(weekId: string, day: number): string {
   const d = new Date(monday);
   d.setDate(d.getDate() + day);
   return toWeekId(d);
+}
+
+/**
+ * A local day id ('YYYY-MM-DD') as "Jun 16" — or "Jun 16, 2025" when it falls in
+ * a different year from `today`, since a note carried for fourteen months should
+ * say which June it means. '' for a blank or malformed id, so a caller can use
+ * the result itself as the "is there anything to show?" test.
+ */
+export function formatDayId(id: string, today = new Date()): string {
+  const date = parseDateId(id);
+  if (!date) return '';
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
 }
 
 /** e.g. "Jun 16 – Jun 22, 2026" for the week starting at `start` (a Monday). */
