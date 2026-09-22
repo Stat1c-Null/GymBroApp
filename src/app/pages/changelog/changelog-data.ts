@@ -6,6 +6,17 @@ import type { ChangelogEntry } from '../../components/changelog-entry/changelog-
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 5,
+    date: '2026-09-22',
+    changes: [
+      'Week sets: save a whole Mon–Sun plan as a reusable set. The /sets page now has two sections — Day sets and Week sets — and the week builder lays out all seven days, so you can leave rest days empty.',
+      'On the Weeks page, "Save week as set" captures everything you logged this week as a new week set, and "Load week set" fills a week from one in a single step. Loading only adds workouts: anything already on a day stays as it is, and you\'ll be told which exercises were skipped.',
+      'Only need one day of a week plan? When applying a set to a day, you can now pick a single day out of any week set, like "PPL Split · Thu".',
+      'New Totals card on the Analytics page shows how much you\'ve done in the selected range: training days, sets, reps and total weight lifted, plus cardio distance, time and sessions. A table ranks your exercises or muscle groups by volume. Pick "All" to see your lifetime totals.',
+      'Notes now carry over: a note you write on an exercise is filled in automatically the next time you log it, dated to when you first wrote it. Edit the note to update it from then on, or switch it off to clear it. Past workouts always keep the note they were logged with. Saved sets carry their notes over too.',
+    ],
+  },
+  {
     version: 4,
     date: '2026-08-30',
     changes: [
