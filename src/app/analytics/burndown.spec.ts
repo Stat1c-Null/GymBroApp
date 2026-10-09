@@ -220,11 +220,19 @@ describe('computeBurndown — edge cases', () => {
     expect(stats.deltaVsPlan).toBeNull();
   });
 
-  it('clamps progress to 0..1 when the user moves the wrong way', () => {
+  it('reports zero progress when the user moves the wrong way', () => {
+    // Cut 200 -> 180, now 210: ten pounds *away* from the target. The old
+    // unsigned distance reported this as 50% progress.
     const points = series(200, 210);
     const stats = computeBurndown(points, points, cut, day(2026, 1, 2));
-    expect(stats.progress).toBeGreaterThanOrEqual(0);
-    expect(stats.progress).toBeLessThanOrEqual(1);
+    expect(stats.progress).toBe(0);
+    expect(stats.goalReached).toBe(false);
+  });
+
+  it('reports zero progress for a bulk that is losing weight', () => {
+    const points = series(200, 195);
+    const stats = computeBurndown(points, points, bulk, day(2026, 1, 2));
+    expect(stats.progress).toBe(0);
   });
 
   it('never projects a crossing that is already behind us', () => {

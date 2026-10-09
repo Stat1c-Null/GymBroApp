@@ -58,21 +58,25 @@ export interface CardioLog {
   elevation?: number | null; // canonical feet
 }
 
-/** "m:ss" (or bare seconds) → total seconds; null for blank/invalid input. */
+/**
+ * "m:ss", "h:mm:ss" or bare seconds → total seconds; null for blank/invalid input.
+ *
+ * Strict on purpose: every field after the first must be 0–59, and anything else
+ * — a fourth field, `1:75`, `-0:30`, `1e3` — is rejected rather than guessed at.
+ * A lenient parse once read a 75-minute run typed as `1:15:00` as 75 *seconds*
+ * (it silently dropped the third field), and saved a pace that was off by 60×.
+ * A fractional final field is floored, as before.
+ */
 export function parseTime(text: string): number | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  const parts = trimmed.split(':');
-  if (parts.length === 1) {
-    const secs = Number(parts[0]);
-    return Number.isFinite(secs) && secs >= 0 ? Math.floor(secs) : null;
-  }
-  const mins = Number(parts[0]);
-  const secs = Number(parts[1]);
-  if (!Number.isFinite(mins) || !Number.isFinite(secs) || mins < 0 || secs < 0) {
-    return null;
-  }
-  return Math.floor(mins) * 60 + Math.floor(secs);
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.floor(Number(trimmed));
+  const match = /^(\d+):([0-5]?\d)(?::([0-5]\d))?(\.\d+)?$/.exec(trimmed);
+  if (!match) return null;
+  const [, first, second, third] = match;
+  return third === undefined
+    ? Number(first) * 60 + Number(second)
+    : Number(first) * 3600 + Number(second) * 60 + Number(third);
 }
 
 /** Total seconds → "m:ss" (seconds zero-padded); "" for null. */

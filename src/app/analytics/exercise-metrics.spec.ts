@@ -140,6 +140,30 @@ describe('computeFrequency', () => {
     expect(f.weeksInRange).toBe(2);
     expect(f.sessions).toBe(2);
   });
+
+  it('counts the calendar weeks a window touches, partial weeks included', () => {
+    // Thu Jan 1 → Thu Jan 29 touches the weeks of Dec 29, Jan 5, 12, 19 and 26.
+    expect(computeFrequency([], day(2026, 1, 1), day(2026, 1, 29)).weeksSpanned).toBe(5);
+  });
+
+  it('never reports more weeks trained than the window spans', () => {
+    // Sunday then Monday: two calendar weeks inside a two-day window. Consistency
+    // used to read "2 / 1".
+    const sunMon = computeFrequency([day(2026, 10, 4), day(2026, 10, 5)], null, day(2026, 10, 5));
+    expect(sunMon.weeksTrained).toBe(2);
+    expect(sunMon.weeksSpanned).toBe(2);
+
+    // A 30-day window starting on a Saturday, trained every Sunday and Monday:
+    // it touches 6 calendar weeks, and used to read "6 / 5".
+    const start = day(2026, 9, 12); // Saturday
+    const now = day(2026, 10, 12); // Monday
+    const days: number[] = [];
+    for (let d = 13; d <= 30; d += 7) days.push(day(2026, 9, d), day(2026, 9, d + 1)); // Sun, Mon
+    days.push(day(2026, 10, 4), day(2026, 10, 5), day(2026, 10, 11), day(2026, 10, 12));
+    const window = computeFrequency(days, start, now);
+    expect(window.weeksTrained).toBe(6);
+    expect(window.weeksSpanned).toBe(6);
+  });
 });
 
 describe('progressPerWeek', () => {

@@ -143,6 +143,19 @@ describe('computeTotals — breakdowns', () => {
     expect(totals.byExercise[0].sets).toBe(6);
   });
 
+  it('labels an exercise row with its newest name, not its first', () => {
+    // Entries keep the name they were logged under; a renamed exercise must not
+    // keep showing its original name in the breakdown.
+    const totals = computeTotals([
+      lift({ label: 'Bench' }),
+      lift({ x: TUE, label: 'Flat Bench' }),
+    ]);
+
+    expect(totals.byExercise).toHaveLength(1);
+    expect(totals.byExercise[0].label).toBe('Flat Bench');
+    expect(totals.byExercise[0].sessions).toBe(2);
+  });
+
   it('folds several exercises into one muscle-group row', () => {
     const totals = computeTotals([
       lift(),

@@ -140,6 +140,20 @@ describe('week.service date helpers', () => {
     expect(parseTime('abc')).toBeNull();
   });
 
+  it('parseTime reads h:mm:ss instead of dropping the hours', () => {
+    // Used to read as 1:15 → 75 seconds.
+    expect(parseTime('1:15:00')).toBe(4500);
+    expect(parseTime('0:05:30')).toBe(330);
+  });
+
+  it('parseTime rejects out-of-range fields and non-time text', () => {
+    expect(parseTime('1:75')).toBeNull();
+    expect(parseTime('1:60:00')).toBeNull();
+    expect(parseTime('1:2:3:4')).toBeNull();
+    expect(parseTime('-0:30')).toBeNull();
+    expect(parseTime('1e3')).toBeNull();
+  });
+
   it('formatTime renders m:ss with zero-padded seconds', () => {
     expect(formatTime(90)).toBe('1:30');
     expect(formatTime(5)).toBe('0:05');

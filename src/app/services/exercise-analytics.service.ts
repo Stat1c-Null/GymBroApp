@@ -116,18 +116,34 @@ export class ExerciseAnalyticsService {
    * constant that lives in a Firestore-importing service.
    *
    * Entries without a resolvable date are dropped, as in `sessionsFor`.
+   *
+   * An entry stores the exercise name and muscle group *as they were when it was
+   * logged*. Totals must follow the library instead: after renaming the group
+   * "Chest" to "Pecs", every Chest session belongs in the Pecs row, not a second
+   * stale row. So the label and group come from the exercise's current library
+   * record when it still exists, and a group that is no longer in the user's
+   * list folds into {@link UNASSIGNED_GROUP} — the same rule
+   * {@link exercisesInGroup} and the rest of the app apply.
    */
   totalsEntries(): TotalsEntry[] {
+    const library = new Map<string, Workout>();
+    for (const w of this.workouts.workouts() ?? []) {
+      if (w.id) library.set(w.id, w);
+    }
+    const known = new Set(this.groups());
+
     const out: TotalsEntry[] = [];
     for (const e of this.entries() ?? []) {
       const x = this.entryX(e);
       if (x == null) continue;
       const isCardio = e.muscleGroup === CARDIO_GROUP && e.cardio != null;
+      const current = library.get(e.workoutId);
+      const group = current?.muscleGroup ?? e.muscleGroup;
       out.push({
         x,
         workoutId: e.workoutId,
-        label: e.workoutName,
-        muscleGroup: e.muscleGroup,
+        label: current?.name ?? e.workoutName,
+        muscleGroup: isOrphanGroup(group, known) ? UNASSIGNED_GROUP : group,
         sets: isCardio ? [] : e.sets ?? [],
         cardio: isCardio ? e.cardio : null,
       });

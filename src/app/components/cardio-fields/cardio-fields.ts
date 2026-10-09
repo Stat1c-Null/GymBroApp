@@ -35,7 +35,7 @@ import {
   template: `
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label" [attr.for]="idPrefix() + '-time'">Duration (m:ss)</label>
+        <label class="form-label" [attr.for]="idPrefix() + '-time'">Duration (m:ss or h:mm:ss)</label>
         <input class="form-input" [attr.id]="idPrefix() + '-time'" type="text" placeholder="m:ss"
           [ngModel]="timeText()" (ngModelChange)="timeText.set($event)" [name]="idPrefix() + '-time'" />
       </div>

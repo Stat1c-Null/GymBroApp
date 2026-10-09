@@ -37,7 +37,7 @@ itself will accept.
 ## Document layout
 
 Almost everything is nested under `users/{uid}/...`. The **only** exceptions are
-the two top-level collections the Friends feature needs, because friend search
+the three top-level collections the Friends feature needs, because friend search
 has to read other people's names — see
 [Cross-user collections](#cross-user-collections-friends).
 
@@ -51,6 +51,7 @@ users/{uid}
 └── weeks/{weekId}/entries/{entryId}   (sub-collection per week)
 
 userProfiles/{uid}              (top-level — the searchable directory)
+emailIndex/{email}              (top-level — exact-email lookup, get-only)
 friendships/{pairId}            (top-level — the friend graph)
 ```
 
@@ -487,7 +488,10 @@ both set by the service on write (`WeekService.add`/`update`):
 
 - **`uid`** — Firestore can't scope a collection group to one user by path, so the
   owner is stored on the doc and used both as the query filter and as the security
-  rule's guard.
+  rule's guard. Because the read rule trusts this field, the write rule for
+  `users/{userId}/**` refuses any document whose `uid` is not `userId`
+  (`stampsOnlyOwner`). Without that, a user could log an entry in their *own* tree
+  stamped with someone else's uid and it would appear in that person's analytics.
 - **`date`** — the logical local `YYYY-MM-DD` (that week's Monday + `day`), so
   analytics gets a stable timeline value without unwrapping the pending
   `serverTimestamp`.
@@ -514,7 +518,7 @@ not exist even when its `entries` sub-collection does).
 
 The per-user tree above structurally cannot support friend search: finding
 someone means reading a document that isn't yours. So the Friends feature adds
-the app's only two top-level collections. Nothing about a user's workouts, weight
+the app's only three top-level collections. Nothing about a user's workouts, weight
 or settings leaves `users/{uid}` — only what's needed to find and label a person.
 
 ### `userProfiles/{uid}` — the searchable directory
@@ -526,11 +530,20 @@ Owned by `UserProfileService`. Shape (`UserProfile` in `services/friends.ts`):
   uid: string;
   displayName: string;       // shown in search results and friend lists
   displayNameLower: string;  // prefix-search key
-  emailLower: string;        // exact-match search key — NEVER rendered
   createdAt: Timestamp;      // first write only
   updatedAt: Timestamp;
 }
 ```
+
+**No email address.** Every signed-in user can read every profile, and a rule
+cannot hide one field of a readable document, so anything stored here is public to
+all users. Profiles used to carry `emailLower` "for matching, never rendered" —
+but it was in every directory response, so anyone could page through the
+directory and collect every address. The rule now refuses any key outside
+`uid, displayName, displayNameLower, createdAt, updatedAt`, and `syncProfile`
+deletes a leftover `emailLower` on the owner's next sign-in. 🟠 Profiles of users
+who never sign in again keep it until removed server-side (a one-off Admin SDK
+script: delete `emailLower` from every `userProfiles` doc).
 
 Upserted by an `effect()` on `AuthService.currentUser`, and only when a field
 would actually change — signing in shouldn't cost a write on every page load.
@@ -547,10 +560,9 @@ all **single-field**, so all auto-indexed with no composite index:
 - **empty term** → `orderBy('displayNameLower')`, paged. Browsing the whole
   directory is the fallback when prefix search can't help (you don't know the
   spelling), and the fastest way to answer "does this person have a profile yet?"
-- **email** (term contains `@`) → `where('emailLower', '==', term)`, unpaged —
-  there's at most one hit. **No `orderBy` on this path**: pairing an equality
-  filter with a sort on a *different* field is exactly what forces a composite
-  index.
+- **email** (term contains `@`) → one `get` of `emailIndex/{term}` → uid →
+  `profileFor(uid)`, unpaged — there's at most one hit. See
+  [`emailIndex`](#emailindexemail--exact-email-lookup) below.
 - **name** → `where('displayNameLower', '>=', term)` +
   `where('displayNameLower', '<=', term + PREFIX_SENTINEL)`, paged. The range
   filter and the sort are on the same field, so it stays single-field.
@@ -575,9 +587,36 @@ so Previous jumps straight back instead of re-walking from page one. Note that
 the signed-in user is filtered out of results *client-side*, after the read, so a
 page can legitimately show 19 rows.
 
+### `emailIndex/{email}` — exact-email lookup
+
+Owned by `UserProfileService`. The document id is the lowercased address
+(`emailIndexId()` in `services/friends.ts`); the body is just `{ uid }`.
+
+Two rules make it safe where `emailLower` on profiles was not:
+
+- **`get` only, `list` never.** You can resolve an address you already know;
+  you cannot enumerate addresses.
+- **Writable only for the caller's own address**:
+  `email == request.auth.token.email.lower()`. The address comes from the Firebase
+  Auth token, not from anything the client writes, so nobody can register someone
+  else's email to be found in their place.
+
+`syncProfile` writes it on sign-in when missing or pointing at another uid. An
+address containing `/` (legal, vanishingly rare) can't be a document id and is
+simply not indexed. Changing your email leaves the old entry behind, still mapping
+the old address to you.
+
 ### `friendships/{pairId}` — the friend graph
 
 Owned by `FriendService`. `pairId = [uidA, uidB].sort().join('_')`.
+
+**The rules enforce that id.** `create` requires the document id to equal
+`pairId(members[0], members[1])` with two distinct members, and
+`isAcceptedFriend` also checks that both users are in `members`. Before this, a
+user could create `friendships/{pairId(self, victim)}` listing a second account of
+their own as the other member, accept it from that account, and pass
+`isAcceptedFriend(victim)` — reading the victim's weeks and weights without the
+victim ever seeing a request.
 
 ```ts
 {
@@ -675,9 +714,9 @@ per entry — the condition depends on the path and `get()`, never on
 all.
 
 Any signed-in user can read any profile — that is the deliberate price of search.
-It is why `emailLower` is stored lowercased for matching but never rendered, and
-why the published `displayName` falls back to the email's local part rather than
-the whole address.
+It is why profiles hold no email at all (lookup goes through the get-only
+`emailIndex`), and why the published `displayName` falls back to the email's local
+part rather than the whole address.
 
 ## Denormalization & consistency
 

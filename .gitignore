@@ -42,3 +42,6 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Nudox local index state (never commit: contains authority.secret)
+.backend/

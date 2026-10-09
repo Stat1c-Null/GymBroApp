@@ -23,13 +23,33 @@ service cloud.firestore {
 
     // Is the signed-in user an *accepted* friend of otherUid? exists() first:
     // get() on a missing document yields null, and reading .data off it fails.
+    //
+    // The membership checks are not redundant with the document id: they are
+    // what stops a friendship document from vouching for anyone but the two
+    // people actually in it, even if one were ever written under a forged id.
     function isAcceptedFriend(otherUid) {
       let path = /databases/$(database)/documents/friendships/$(pairId(request.auth.uid, otherUid));
-      return exists(path) && get(path).data.status == 'accepted';
+      return exists(path) && isAcceptedPair(get(path).data, otherUid);
+    }
+
+    function isAcceptedPair(friendship, otherUid) {
+      return friendship.status == 'accepted'
+          && request.auth.uid in friendship.members
+          && otherUid in friendship.members;
+    }
+
+    // A document under users/{userId} may carry a `uid` field only if it is the
+    // owner's. Week entries denormalize `uid` for the collection-group analytics
+    // read below; without this, anyone could stamp an entry in their *own* tree
+    // with someone else's uid and have it appear in that person's analytics.
+    function stampsOnlyOwner(userId) {
+      return !('uid' in request.resource.data) || request.resource.data.uid == userId;
     }
 
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+                            && stampsOnlyOwner(userId);
     }
 
     // A friend's logged week — read-only. Rules are OR-ed with the owner rule
@@ -52,18 +72,48 @@ service cloud.firestore {
     }
 
     // Any signed-in user can read any profile — the deliberate price of search.
+    // Because of that, a profile holds only what is safe to show everyone: the
+    // email address is NOT allowed here (see emailIndex below). Rules cannot hide
+    // a field from a read, so the only way to keep it private is to never store it.
     match /userProfiles/{uid} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+                            && request.resource.data.uid == uid
+                            && request.resource.data.keys().hasOnly(
+                                 ['uid', 'displayName', 'displayNameLower', 'createdAt', 'updatedAt']);
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
 
-    match /friendships/{pairId} {
+    // Exact-email lookup: emailIndex/{lowercased email} -> { uid }.
+    //  - `get` only, never `list`: you can find the owner of an address you
+    //    already know, but you cannot page through everyone's addresses.
+    //  - Writable only for the address on the caller's own Firebase Auth token,
+    //    so nobody can claim someone else's email to be found in their place.
+    match /emailIndex/{email} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create, update: if request.auth != null
+                            && request.auth.token.email != null
+                            && email == request.auth.token.email.lower()
+                            && request.resource.data.keys().hasOnly(['uid'])
+                            && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    match /friendships/{friendshipId} {
       allow read:   if request.auth != null
                     && request.auth.uid in resource.data.members;
+      // The id must be the sorted pair of the two members. Without that check a
+      // user could create friendships/{pairId(self, victim)} listing a second
+      // account of their own as the other member, accept it from that account,
+      // and isAcceptedFriend(victim) would then let them read the victim's data.
       allow create: if request.auth != null
                     && request.auth.uid == request.resource.data.requesterUid
                     && request.auth.uid in request.resource.data.members
                     && request.resource.data.members.size() == 2
+                    && request.resource.data.members[0] != request.resource.data.members[1]
+                    && friendshipId == pairId(request.resource.data.members[0],
+                                              request.resource.data.members[1])
                     && request.resource.data.status == 'pending';
       // Only the recipient can accept, and only pending -> accepted. Because a
       // setDoc onto an existing document counts as an update, this also refuses

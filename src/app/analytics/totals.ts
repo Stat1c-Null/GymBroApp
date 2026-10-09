@@ -205,6 +205,9 @@ function accumulate(
     };
     rows.set(key, row);
   }
+  // Entries arrive oldest-first, so the last label seen is the newest. A row
+  // must read as the exercise is called *now*, not as it was first logged.
+  row.label = label;
   row.days.add(entry.x);
   row.sets += sets;
   row.reps += reps;
