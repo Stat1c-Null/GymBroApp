@@ -16,7 +16,7 @@ via `inject()`, never provided per-component.
 | `WeightService` | `users/{uid}/weights` | `weights` | `add`, `remove`, `recentFor(uid)` — the last `RECENT_WEIGHTS` weigh-ins of any user, for the Friends page's weight panel (rules decide; the stream errors if they aren't friends) |
 | `WeightAnalyticsService` | derives from `WeightService` + `SettingsService` | `samples`, `daily`, `trend`, `latestLbs`, `goal`, `today` | — (read-only derivation) |
 | `ExerciseAnalyticsService` | collection-group over all `entries` (+ `WorkoutService`/`SettingsService`) | `entries` (all weeks), `loaded`, `groups` | `exercisesInGroup(group)`, `sessionsFor(ids)`, `totalsEntries()` — read-only. `sessionsFor` takes an id list and drops `cardio`; `totalsEntries` takes none and keeps it, which is why totals couldn't be built on the former |
-| `EntryBackfillService` | `users/{uid}/weeks/*/entries` | — | `backfillEntries()` — one-time uid/date migration (idempotent) |
+| `EntryBackfillService` | `users/{uid}/weeks/*/entries` | — | `backfillEntries()` — one-time uid/date migration (idempotent); `ensureBackfilled()` — call from an `effect` on any page showing exercise analytics (Analytics, Dashboard): waits for workouts/weights to load, then runs the migration once per session unless `entriesBackfilledAt` is set |
 | `UserProfileService` | `userProfiles/{uid}` (top-level) | — (a `Map` cache, not a signal) | `listProfiles(term?, after?)` — one paged page of the directory (empty term = browse everyone), `profileFor(uid)`; an `effect()` publishes the signed-in user's entry |
 | `FriendService` | `friendships/{pairId}` (top-level) | `friendships`, `friends`, `incomingRequests`, `outgoingRequests`, `byOtherUid` | `sendRequest`, `accept`, `decline`, `cancel`, `remove` |
 | `ChartThemeService` | `ThemeService` | `palette` (computed) | — |
@@ -89,7 +89,7 @@ reducer and a card — not touching anything in here.
 | `AnalyticsCardComponent` | `app-analytics-card` | `title` (required), `subtitle`, `state`, `emptyMessage` | Titled `.glass-card` with loading/empty/ready states; encodes the `undefined = loading, [] = empty` convention once. Has **no** filter slot on purpose — per-card ranges let cards disagree. |
 | `StatTileComponent` | `app-stat-tile` | `label` (required), `value` (required), `unit`, `tone`, `hint` | One headline number. A toned tile always renders an arrow + words, never colour alone. |
 | `RangeSelectorComponent` | `app-range-selector` | `range` (`model()`) | 30d/90d/6m/1y/All. Belongs in one row above the cards. |
-| `TrainingTotalsComponent` | `app-training-totals` | `range` (required) | The third Analytics card: lifting tiles, cardio tiles, and a breakdown table toggled between per-exercise and per-muscle-group. Reads `ExerciseAnalyticsService.totalsEntries()`, windows it with `rangeStart`, and folds it with the pure `computeTotals` (`analytics/totals.ts`). Converts the canonical **sum** once at the display boundary and formats with `toLocaleString()` — not the `lifted` pipe, which emits ungrouped digits. Uses no chart component. |
+| `TrainingTotalsComponent` | `app-training-totals` | `range` (required), `compact` | `compact` (Dashboard) drops the breakdown table, lays the tiles 2×2 / 1×3 for a half-width column, and puts a "Details →" link to `/analytics` in the header. The third Analytics card: lifting tiles, cardio tiles, and a breakdown table toggled between per-exercise and per-muscle-group. Reads `ExerciseAnalyticsService.totalsEntries()`, windows it with `rangeStart`, and folds it with the pure `computeTotals` (`analytics/totals.ts`). Converts the canonical **sum** once at the display boundary and formats with `toLocaleString()` — not the `lifted` pipe, which emits ungrouped digits. Uses no chart component. |
 
 `ChartThemeService` + `CHART_PALETTE` (`chart-palette.ts`) supply chart colours from
 TypeScript rather than CSS variables — canvas cannot read CSS custom properties, and
@@ -117,7 +117,7 @@ this list is just the file map:
 |---|---|---|
 | Login | `/login` | `login.ts`, `.html`, `.css` |
 | Signup | `/signup` | `signup.ts`, `.html`, `.css` |
-| Dashboard | `/dashboard` | `dashboard.ts`, `.html`, `.css` |
+| Dashboard | `/dashboard` | `dashboard.ts`, `.html`, `.css`; `today-workouts/` (`TodayWorkoutsComponent`, `app-today-workouts` — read-only list of today's entries) |
 | Weeks | `/weeks` | `weeks.ts`, `.html`, `.css` |
 | Workouts | `/workouts` | `workouts.ts`, `.html`, `.css` |
 | Sets | `/sets` | `sets.ts`, `.html`, `.css` — the saved-set library; the builder lives in `components/set-form-modal/` |

@@ -247,6 +247,21 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Quiet "Details →" link in an analytics-card header's actions slot — the
+   Dashboard's summary cards point at their full page with it instead of
+   carrying button chrome. Shared: dashboard cards, compact burndown/totals. */
+.card-link {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  white-space: nowrap;
+}
+
+.card-link:hover {
+  text-decoration: underline;
+}
+
 /* ---- Buttons ---- */
 .btn {
   display: inline-flex;

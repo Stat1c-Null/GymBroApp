@@ -43,6 +43,9 @@ export class WeightBurndownComponent {
   private readonly settings = inject(SettingsService);
 
   readonly range = input.required<TimeRangeKey>();
+  /** The Dashboard's summary: a shorter chart, the three headline tiles, and a
+   *  link to the full card instead of the goal editor. */
+  readonly compact = input(false);
   readonly editGoal = output<void>();
 
   protected readonly unit = this.settings.unit;

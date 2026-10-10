@@ -4,9 +4,13 @@
   [state]="state()"
   emptyMessage="No weigh-ins yet — log your first one to see your trend."
 >
-  <button actions class="btn btn-secondary" (click)="editGoal.emit()">
-    {{ goal() ? 'Edit goal' : 'Set a goal' }}
-  </button>
+  @if (compact()) {
+    <a actions class="card-link" routerLink="/analytics">Details →</a>
+  } @else {
+    <button actions class="btn btn-secondary" (click)="editGoal.emit()">
+      {{ goal() ? 'Edit goal' : 'Set a goal' }}
+    </button>
+  }
 
   <a empty-action class="btn btn-primary" routerLink="/weights">Log a weigh-in</a>
 
@@ -29,10 +33,10 @@
     [formatX]="formatX"
     [formatY]="formatY"
     [ariaLabel]="ariaLabel()"
-    [height]="320"
+    [height]="compact() ? 220 : 320"
   />
 
-  <div class="stats">
+  <div class="stats" [class.stats-compact]="compact()">
     <app-stat-tile label="Current" [value]="currentText()" [unit]="unit()" [hint]="changeHint()" />
 
     @if (stats(); as s) {
@@ -40,17 +44,25 @@
         [hint]="s.direction === 'cut' ? 'cutting' : 'bulking'" />
       <app-stat-tile label="Remaining" [value]="remainingText()"
         [unit]="s.goalReached ? '' : unit()" />
-      <app-stat-tile label="Rate" [value]="rateText()" [unit]="unit()" [tone]="rateTone()"
-        [hint]="rateHint()" />
-      <app-stat-tile label="Projected" [value]="projectedText()"
-        [hint]="s.projectedDate ? 'at this rate' : ''" />
-      <app-stat-tile label="Vs. plan" [value]="planText()"
-        [unit]="stats()?.deltaVsPlan == null ? '' : unit()" [tone]="planTone()"
-        [hint]="planHint()" />
+      @if (!compact()) {
+        <app-stat-tile label="Rate" [value]="rateText()" [unit]="unit()" [tone]="rateTone()"
+          [hint]="rateHint()" />
+        <app-stat-tile label="Projected" [value]="projectedText()"
+          [hint]="s.projectedDate ? 'at this rate' : ''" />
+        <app-stat-tile label="Vs. plan" [value]="planText()"
+          [unit]="stats()?.deltaVsPlan == null ? '' : unit()" [tone]="planTone()"
+          [hint]="planHint()" />
+      }
     } @else {
       <div class="stats-cta">
-        <p class="text-muted">Set a goal to see your pace, projected finish date, and whether
-          you're ahead of plan.</p>
+        @if (compact()) {
+          <p class="text-muted">
+            <a routerLink="/analytics">Set a goal</a> to track your pace.
+          </p>
+        } @else {
+          <p class="text-muted">Set a goal to see your pace, projected finish date, and whether
+            you're ahead of plan.</p>
+        }
       </div>
     }
   </div>

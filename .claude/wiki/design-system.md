@@ -47,7 +47,11 @@ as component-scoped styles:
   `.btn-google` / `.btn-ghost`; `.btn-full` for 100%-width. Disabled state is
   handled by the `.btn:disabled` selector, not a separate class.
 - **Cards**: `.glass-card` — the frosted-glass card look (`backdrop-filter:
-  blur`) used for the dashboard welcome card, list rows, empty states, etc.
+  blur`) used for the dashboard greeting bar, list rows, empty states, etc.
+- **Card header link**: `.card-link` — a quiet "Details →" text link for an
+  `app-analytics-card`'s `actions` slot. Used by the Dashboard's summary cards
+  (compact burndown/totals, Today, What's new) to point at the full page
+  without button chrome.
 - **Forms**: `.form-group` / `.form-label` / `.form-input` / `.form-error` /
   `.form-row` (two fields side by side) / `.form-hint` (the small muted line
   under a field). `.form-hint` used to be duplicated per page; it went global

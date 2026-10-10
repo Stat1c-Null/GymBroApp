@@ -37,9 +37,28 @@ instead of showing an error, since the user didn't do anything wrong.
 
 **Files**: `pages/dashboard/`.
 
-The landing page after `/`. A single welcome card with quick links to This
-Week, Workouts, Weight, and Changelog. No data of its own — purely
-navigation plus `AuthService.displayName()` for the greeting.
+The landing page after `/`. A **read-only summary** of other pages — nothing
+can be logged or edited from here; every card links to where the real thing
+lives. Top to bottom:
+
+1. **Greeting bar** — a slim `.glass-card` with `AuthService.displayName()` and
+   pill-style quick links to This Week, Workouts, Weight, and Changelog.
+2. **Progress** — one `RangeSelectorComponent` (default `30d`) above the
+   Analytics page's own `WeightBurndownComponent` and `TrainingTotalsComponent`,
+   side by side from 900px, both with `[compact]="true"` (shorter chart / fewer
+   tiles / no breakdown table, and a "Details →" link to `/analytics` in place
+   of the goal editor). One range for both, for the same reason as on
+   [Analytics](#analytics). Because Totals is here, the Dashboard also triggers
+   `EntryBackfillService.ensureBackfilled()` — otherwise a user who never opened
+   Analytics would see totals missing their pre-analytics entries.
+3. **Today** — `TodayWorkoutsComponent` (`pages/dashboard/today-workouts/`):
+   today's entries as roomy cards (name, muscle group, `entrySummary`, note +
+   carried-note date). It queries **the week containing today** through
+   `WeekService.entriesFor`, *not* `WeekService.entries`, which follows whatever
+   week the Weeks page last navigated to. Keyed off `WeekService.today`, so it
+   rolls over at midnight. Its "Open week →" link calls `goToThisWeek()` first.
+4. **What's new** — `ChangelogEntryComponent` for `CHANGELOG[0]` only, with an
+   "All updates →" link to `/changelog`.
 
 ## Weeks (weekly workout logging)
 

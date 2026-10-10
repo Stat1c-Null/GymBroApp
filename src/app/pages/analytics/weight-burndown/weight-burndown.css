@@ -20,6 +20,12 @@
   }
 }
 
+/* Compact (Dashboard) shows three tiles — always one row of three, since the
+   card sits in a half-width column where the viewport breakpoint above lies. */
+.stats.stats-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .stats-cta {
   grid-column: 1 / -1;
   padding: 0.85rem 1rem;

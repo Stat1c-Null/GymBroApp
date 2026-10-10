@@ -1,72 +1,114 @@
-.dashboard-page {
+.dashboard {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
-.dashboard-content {
-  width: 100%;
-  max-width: 560px;
+/* ---- Greeting + quick access ---- */
+
+.dash-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0.85rem 1.1rem;
+  /* Quieter than the other cards: it's navigation, not content. */
+  box-shadow: none;
+  animation: barEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.welcome-card {
-  padding: 3rem 2.5rem;
-  text-align: center;
-  animation: cardEntrance 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes cardEntrance {
+@keyframes barEntrance {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.97);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
-.welcome-icon {
-  display: inline-flex;
+.dash-greeting {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-xl);
-  background: hsla(270, 80%, 55%, 0.1);
-  margin-bottom: 1.5rem;
+  gap: 0.7rem;
+  min-width: 0;
 }
 
-.welcome-title {
-  font-size: 1.8rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  margin-bottom: 0.5rem;
-  background: var(--primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.dash-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
-.welcome-subtitle {
-  font-size: 1rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.dashboard-links {
+.quick-links {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  gap: 0.4rem;
+}
+
+.quick-link {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.quick-link:hover {
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.quick-link-primary {
+  color: var(--primary-light);
+}
+
+/* ---- Progress row ---- */
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 1.75rem;
+  margin-top: 0.25rem;
+}
+
+.section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Side by side from tablet width up, stacked below. minmax(0, 1fr) lets the
+   chart shrink with its column instead of forcing the row wider. */
+.dash-analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin-top: -0.5rem;
+}
+
+@media (min-width: 900px) {
+  .dash-analytics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 
 @media (max-width: 480px) {
-  .welcome-card {
-    padding: 2rem 1.5rem;
-  }
-
-  .welcome-title {
-    font-size: 1.4rem;
+  .dash-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

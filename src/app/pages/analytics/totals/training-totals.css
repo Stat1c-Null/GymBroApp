@@ -44,6 +44,17 @@
   }
 }
 
+/* Compact (Dashboard): the card sits in a half-width column, so the viewport
+   breakpoint above would squeeze four tiles across. 2×2 for lifting, one row of
+   three for cardio — neither strands a tile. */
+.stats.stats-compact-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stats.stats-compact-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .empty-note {
   margin: 0.9rem 0 0;
   font-size: 0.9rem;

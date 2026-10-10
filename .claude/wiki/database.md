@@ -508,8 +508,10 @@ Two pieces of setup beyond the app code:
 **Back-fill for old entries:** entries logged before this feature lack `uid`/`date`,
 so they'd be invisible to the query. `EntryBackfillService` stamps them once — an
 **additive, idempotent** migration (only `batch.update`s the two fields, skips
-already-stamped docs) triggered from the Analytics page on first open and gated by a
-persisted `settings.entriesBackfilledAt` flag. It finds entries by walking weekIds
+already-stamped docs) triggered from an `effect` on the Analytics page **and** the
+Dashboard (both render the Totals card) via `EntryBackfillService.ensureBackfilled()`,
+which holds the once-per-session guard, and gated by a persisted
+`settings.entriesBackfilledAt` flag. It finds entries by walking weekIds
 deterministically (Monday → Monday from the account's earliest activity), which
 sidesteps the Firestore "phantom parent" problem (a `weeks/{weekId}` parent doc may
 not exist even when its `entries` sub-collection does).

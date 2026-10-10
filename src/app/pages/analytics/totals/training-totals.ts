@@ -39,6 +39,9 @@ export class TrainingTotalsComponent {
   private readonly week = inject(WeekService);
 
   readonly range = input.required<TimeRangeKey>();
+  /** The Dashboard's summary: the tiles only, with a link to the full card —
+   *  the breakdown table is too tall for a half-width column. */
+  readonly compact = input(false);
 
   protected readonly unit = this.settings.unit;
   protected readonly distanceUnit = this.settings.distanceUnit;
