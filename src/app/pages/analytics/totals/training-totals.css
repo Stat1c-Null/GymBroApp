@@ -2,6 +2,11 @@
    muscle-progress.css — those rules are component-scoped there, so a card that
    wants the same look has to restate them rather than inherit them. */
 
+/* Grow to the height the Dashboard row gives this component. */
+app-analytics-card {
+  flex: 1;
+}
+
 .control {
   display: flex;
   flex-direction: column;

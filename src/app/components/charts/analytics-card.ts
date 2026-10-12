@@ -46,7 +46,15 @@ import { Component, input } from '@angular/core';
   `,
   styles: [
     `
+      /* Fills whatever height its parent gives it (e.g. the equal-height
+         Dashboard cards); no effect when the parent isn't a flex container. */
+      :host {
+        display: flex;
+        flex-direction: column;
+      }
+
       .card {
+        flex: 1;
         padding: 1.25rem 1.4rem 1.4rem;
       }
 

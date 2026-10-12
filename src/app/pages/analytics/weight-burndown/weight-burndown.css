@@ -1,3 +1,8 @@
+/* Grow to the height the Dashboard row gives this component. */
+app-analytics-card {
+  flex: 1;
+}
+
 .banner {
   margin-bottom: 1rem;
 }

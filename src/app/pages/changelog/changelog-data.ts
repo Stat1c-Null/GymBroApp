@@ -6,6 +6,21 @@ import type { ChangelogEntry } from '../../components/changelog-entry/changelog-
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 6,
+    date: '2026-10-11',
+    changes: [
+      'A new Dashboard: a slim greeting bar with quick links, then your Progress — the weight burndown and training totals side by side, sharing one date range — with a "Details →" link to the full Analytics page. The two cards are always the same height.',
+      'The Dashboard has a Today card listing everything you\'ve logged today, with sets, notes and when each note was first written. "Open week →" jumps straight to this week.',
+      'The Dashboard also shows the latest changelog entry under "What\'s new", with a link to all updates.',
+      'Cardio durations can now be entered as h:mm:ss, so a long run like 1:15:00 is saved as 75 minutes rather than 75 seconds. Times that don\'t make sense, like 1:75, are rejected instead of guessed at.',
+      'Weight burndown: moving away from your goal (gaining on a cut, or losing on a bulk) no longer counts as progress toward it.',
+      'Muscle progress: "weeks trained" now compares against the calendar weeks in your range, so it can no longer show something like 6 / 5.',
+      'Totals now use each exercise\'s and muscle group\'s current name, so renaming one no longer splits its history into two rows. Exercises in a group you\'ve deleted are listed as Unassigned.',
+      'Privacy: your email address is no longer stored on your public profile. People can still find you by typing your exact email, but nobody can browse other users\' addresses. Your profile is cleaned up automatically the next time you sign in.',
+      'Tightened security rules for friendships and shared workout data, so only you and your accepted friends can see your training.',
+    ],
+  },
+  {
     version: 5,
     date: '2026-09-22',
     changes: [
