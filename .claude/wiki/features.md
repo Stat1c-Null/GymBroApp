@@ -598,6 +598,41 @@ on the existing service, a card, and one line on the page.
 > needs a Firebase-console collection-group index + security rule — see
 > [Database → Cross-week analytics reads](./database.md#cross-week-analytics-reads-the-exception).
 
+## Records (personal bests)
+
+**Files**: `pages/records/` (`records.ts`, `.html`, `.css`), `analytics/records.ts`
+(+ `records.spec.ts`).
+
+Every exercise's personal bests, at `/records` (nav: after Analytics). Strength
+exercises hold up to four: **Est. 1RM** (Epley, same formula as the exercise card),
+**heaviest set**, **most reps** in one set, and **best session volume**. Cardio holds
+**longest distance**, **longest session** and **fastest pace**. A per-set record
+keeps the set behind it ("5 × 225 lbs"), and a record set in the last 7 days gets
+a "New" badge.
+
+**Derived, never stored.** `computeRecords` runs over
+`ExerciseAnalyticsService.totalsEntries()` — the same rows the Totals card uses —
+so there is no `records` collection and no write path. Editing or deleting an old
+session can't leave a stale record behind, and a renamed exercise or muscle group
+carries its records with it (label/group come from the current library). The page
+triggers `EntryBackfillService.ensureBackfilled()` like Analytics and the
+Dashboard, since pre-backfill entries may hold old bests.
+
+Rules worth knowing:
+
+- **Ties keep the earlier date** — a record is set when first reached.
+- **Same-day entries of one exercise are pooled** before session volume, matching
+  the exercise-progress card.
+- An exercise logged only with blank sets is still listed (with no records), so a
+  search for it finds it.
+
+**Search is one box, no field picker.** `searchRecords` splits the query into words;
+each word must match the exercise name *or* the muscle group (independently), so
+"chest incline" finds Incline Press in Chest. Case- and accent-insensitive.
+Ranking: name matches weigh double over group matches, and a word-start match
+outranks a mid-word one. Each hit reports which field matched; the page outlines
+the group chip when the group matched, and tapping a chip searches that group.
+
 ## Friends
 
 **Files**: `pages/friends/` (`friends.ts`, `.html`, `.css`),

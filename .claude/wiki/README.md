@@ -24,7 +24,7 @@ backend server.
   denormalization decisions, what's *not* configured (e.g. no rules file in
   this repo).
 - [Features](./features.md) — one section per feature (auth, dashboard,
-  weeks, workouts, workout sets, weights, settings, analytics, friends,
+  weeks, workouts, workout sets, weights, settings, analytics, records, friends,
   changelog, theming, toasts),
   what it does, and how it interacts with other features.
 - [Components & Services](./components-and-services.md) — catalog of every

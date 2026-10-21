@@ -53,6 +53,11 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'records',
+        loadComponent: () =>
+          import('./pages/records/records').then((m) => m.RecordsComponent),
+      },
+      {
         path: 'friends',
         loadComponent: () =>
           import('./pages/friends/friends').then((m) => m.FriendsComponent),

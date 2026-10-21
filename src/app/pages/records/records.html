@@ -1,0 +1,86 @@
+<section class="page">
+  <div class="list-header">
+    <div>
+      <h1 class="page-title">Records</h1>
+      <p class="page-subtitle">Your personal bests on every exercise you've logged.</p>
+    </div>
+  </div>
+
+  <!-- One box: each word matches an exercise name or a muscle group, whichever fits. -->
+  <div class="records-search">
+    <svg class="records-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+    </svg>
+    <input id="records-search" class="form-input" type="search" autocomplete="off"
+      placeholder="Search by exercise or muscle group — e.g. bench, legs, chest incline"
+      aria-label="Search records by exercise or muscle group" [value]="query()" (input)="onInput($event)" />
+    @if (query()) {
+      <button class="records-search-clear" type="button" (click)="clear()" aria-label="Clear search">✕</button>
+    }
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="list-loading"><span class="spinner"></span></div>
+    }
+    @case ('empty') {
+      <div class="glass-card list-empty">
+        No records yet — log a workout on the Weeks page and your bests will show up here.
+      </div>
+    }
+    @default {
+      <p class="records-summary text-muted" aria-live="polite">
+        {{ hits().length }} {{ hits().length === 1 ? 'exercise' : 'exercises' }}
+        @if (newCount()) {
+          · <span class="records-new-count">{{ newCount() }} new this week</span>
+        }
+      </p>
+
+      <div class="records-list">
+        @for (hit of hits(); track hit.item.workoutId) {
+          <article class="glass-card records-card">
+            <header class="records-card-header">
+              <h2 class="records-name">{{ hit.item.label }}</h2>
+              <button class="records-group" type="button" [class.matched]="query() && hit.matched !== 'name'"
+                (click)="searchGroup(hit.item.muscleGroup)" [attr.aria-label]="'Search ' + hit.item.muscleGroup">
+                {{ hit.item.muscleGroup }}
+              </button>
+              <span class="records-sessions text-muted">
+                {{ hit.item.sessions }} {{ hit.item.sessions === 1 ? 'session' : 'sessions' }}
+              </span>
+            </header>
+
+            @if (hit.item.records.length) {
+              <dl class="records-grid">
+                @for (r of hit.item.records; track r.kind) {
+                  <div class="records-tile" [class.is-new]="isNew(r)">
+                    <dt>
+                      {{ meta[r.kind].label }}
+                      @if (isNew(r)) {
+                        <span class="records-badge">New</span>
+                      }
+                    </dt>
+                    <dd class="records-value">{{ valueText(r) }}</dd>
+                    <dd class="records-detail text-muted">
+                      @if (setText(r); as set) {
+                        {{ set }} ·
+                      }
+                      {{ dateText(r.x) }}
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p class="text-muted">Logged, but no sets with reps or weight yet.</p>
+            }
+          </article>
+        } @empty {
+          <div class="glass-card list-empty">
+            Nothing matches “{{ query() }}”. Try an exercise name or a muscle group.
+          </div>
+        }
+      </div>
+    }
+  }
+</section>
