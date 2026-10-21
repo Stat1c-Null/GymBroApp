@@ -1,0 +1,106 @@
+<section class="page">
+  <div class="list-header">
+    <div>
+      <h1 class="page-title">Personal Records</h1>
+      <p class="page-subtitle">Your best ever on every exercise you've logged.</p>
+    </div>
+  </div>
+
+  <!-- One box searches name and muscle group together -->
+  <div class="records-search">
+    <svg class="records-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+    <input id="records-search" class="form-input" type="search" placeholder="Search by exercise or muscle group…"
+      aria-label="Search records by exercise or muscle group" autocomplete="off"
+      [value]="query()" (input)="onSearch($event)" />
+    @if (query()) {
+      <button class="records-search-clear" type="button" (click)="clearSearch()" aria-label="Clear search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
+    }
+  </div>
+
+  @if (loaded()) {
+    @if (records().length === 0) {
+      <div class="glass-card list-empty">
+        No records yet — log a workout on the Weeks page and your bests will show up here.
+      </div>
+    } @else if (results().length === 0) {
+      <div class="glass-card list-empty">No exercises or muscle groups match "{{ query() }}".</div>
+    } @else {
+      <p class="records-count text-muted">
+        {{ results().length }} {{ results().length === 1 ? 'exercise' : 'exercises' }}
+      </p>
+      <div class="records-grid">
+        @for (r of results(); track r.workoutId) {
+          <article class="glass-card record-card">
+            <header class="record-head">
+              <h2 class="record-name">{{ r.label }}</h2>
+              <span class="record-group">{{ r.muscleGroup }}</span>
+            </header>
+
+            <dl class="record-stats">
+              @if (r.cardio) {
+                @if (r.longestDistance; as m) {
+                  <div class="record-stat">
+                    <dt>Longest distance</dt>
+                    <dd>{{ distance(m.value) }}</dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+                @if (r.longestTime; as m) {
+                  <div class="record-stat">
+                    <dt>Longest session</dt>
+                    <dd>{{ duration(m.value) }}</dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+              } @else {
+                @if (r.heaviest; as m) {
+                  <div class="record-stat">
+                    <dt>Heaviest set</dt>
+                    <dd>
+                      {{ m.value | lifted: unit() }}
+                      @if (m.reps) { <span class="record-reps">× {{ m.reps }}</span> }
+                    </dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+                @if (r.est1rm; as m) {
+                  <div class="record-stat">
+                    <dt>Est. 1RM</dt>
+                    <dd>{{ round(m.value) | lifted: unit() }}</dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+                @if (r.mostReps; as m) {
+                  <div class="record-stat">
+                    <dt>Most reps</dt>
+                    <dd>{{ m.value }}</dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+                @if (r.bestVolume; as m) {
+                  <div class="record-stat">
+                    <dt>Best day volume</dt>
+                    <dd>{{ round(m.value) | lifted: unit() }}</dd>
+                    <span class="record-date">{{ formatDate(m.x) }}</span>
+                  </div>
+                }
+              }
+            </dl>
+
+            <footer class="record-foot text-muted">
+              {{ r.sessions }} {{ r.sessions === 1 ? 'session' : 'sessions' }} · last {{ formatDate(r.lastX) }}
+            </footer>
+          </article>
+        }
+      </div>
+    }
+  } @else {
+    <div class="list-loading"><span class="spinner"></span></div>
+  }
+</section>

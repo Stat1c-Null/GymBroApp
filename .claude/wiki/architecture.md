@@ -49,6 +49,7 @@ notification queue — see [Features → Toasts](./features.md#toasts).
   ├── /sets
   ├── /weights
   ├── /analytics
+  ├── /records
   ├── /friends
   ├── /settings
   ├── /changelog
@@ -83,7 +84,7 @@ Two different shells depending on whether the user is authenticated:
   publishing the signed-in user's `userProfiles/{uid}` directory entry — because
   the shell is the one component wrapping every signed-in route.
 - **`NavSidebarComponent`** (`src/app/layout/nav-sidebar/`) — the left nav:
-  links to Dashboard/Weeks/Workouts/Weight/Analytics/Friends/Settings, plus
+  links to Dashboard/Weeks/Workouts/Sets/Weight/Analytics/Records/Friends/Settings, plus
   `ThemeToggleComponent` and a Sign Out button. `RouterLinkActive` highlights
   the current page. Note: it does **not** currently link to `/changelog` —
   that page is only reachable via the Dashboard button.
@@ -104,6 +105,7 @@ src/app/analytics/          pure maths — NO Angular, NO Firestore imports
   chart.types.ts            ChartPoint, ChartSeries, TimeRange
   time-series.ts            bucketing, moving average, regression, scales
   burndown.ts               direction-agnostic burndown maths
+  personal-records.ts       per-exercise bests + name/muscle-group search (/records)
 src/app/components/charts/  reusable presentation — no service imports
   chart-palette.ts          theme → colours (TS, not CSS — see design-system.md)
   line-chart.ts             the only place Chart.js is touched

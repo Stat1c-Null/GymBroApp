@@ -598,6 +598,32 @@ on the existing service, a card, and one line on the page.
 > needs a Firebase-console collection-group index + security rule — see
 > [Database → Cross-week analytics reads](./database.md#cross-week-analytics-reads-the-exception).
 
+## Personal Records
+
+`/records` (`pages/records/`) shows the user's best-ever performance on every
+exercise they've logged, one card per exercise, most recently trained first:
+
+- **Strength:** heaviest set (weight × reps), best Epley est. 1RM over any single
+  set, most reps in one set, and best single-day volume (two entries of the same
+  exercise on one day are summed).
+- **Cardio:** longest distance and longest session time.
+
+Each record carries the date it was set; on a tie the **earliest** day keeps it.
+
+**Nothing is stored.** Records are derived on the fly by the pure
+`analytics/personal-records.ts` from `ExerciseAnalyticsService.totalsEntries()` —
+the same full-history collection-group stream the Analytics Totals card reads —
+so there's no collection to keep in sync, editing/deleting a logged set fixes its
+record automatically, and a renamed exercise or regrouped muscle group follows the
+library (that accessor already resolves name/group against the current workout).
+
+**Search is one box, no "search by" selector.** `searchRecords` splits the query on
+whitespace and keeps a record when *every* word is a case-insensitive substring of
+its exercise name **or** its muscle group — so `chest` finds all Chest exercises
+(and anything named "Chest …"), `bench` finds bench press, and `legs squat` narrows
+to squats in Legs. Exact name/group matches rank first, then prefix matches, then
+the rest, each tier keeping the most-recent-first order.
+
 ## Friends
 
 **Files**: `pages/friends/` (`friends.ts`, `.html`, `.css`),

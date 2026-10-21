@@ -123,6 +123,7 @@ this list is just the file map:
 | Sets | `/sets` | `sets.ts`, `.html`, `.css` — the saved-set library; the builder lives in `components/set-form-modal/` |
 | Weights | `/weights` | `weights.ts`, `.html`, `.css` |
 | Analytics | `/analytics` | `analytics.ts`, `.html`, `.css`; `goal-form-modal.ts`; `weight-burndown/` (ts/html/css); `muscle-progress/` (ts/html/css) |
+| Records | `/records` | `records.ts`, `.html`, `.css` — personal records + search; maths in `analytics/personal-records.ts` |
 | Friends | `/friends` | `friends.ts`, `.html`, `.css`; `friend-week/` and `friend-weight/` (each ts/html/css) — the read-only panels that expand under a friend's row |
 | Settings | `/settings` | `settings.ts`, `.html`, `.css` |
 | Changelog | `/changelog` | `changelog.ts`, `.html`, `.css`, `changelog-data.ts` |
