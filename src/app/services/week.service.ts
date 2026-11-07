@@ -11,6 +11,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  writeBatch,
+  Timestamp,
 } from '@angular/fire/firestore';
 import { Observable, combineLatest, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
@@ -27,7 +29,16 @@ export const DAY_LABELS = [
   'Sun',
 ] as const;
 
-export interface WorkoutSet {
+/**
+ * One set within a logged exercise — the gym sense of "set": a number of reps
+ * at a weight, optionally timed.
+ *
+ * Named `LoggedSet` rather than `WorkoutSet` because that name belongs to the
+ * *other* sense of the word: a saved, reusable bundle of exercises
+ * (`workout-set.service.ts`). Two concepts, one English word — the code keeps
+ * them apart so a reader never has to guess which one a `sets` field holds.
+ */
+export interface LoggedSet {
   reps: number | null;
   weight: number | null;
   time?: number | null; // duration in seconds (optional; older entries lack it)
@@ -47,21 +58,25 @@ export interface CardioLog {
   elevation?: number | null; // canonical feet
 }
 
-/** "m:ss" (or bare seconds) → total seconds; null for blank/invalid input. */
+/**
+ * "m:ss", "h:mm:ss" or bare seconds → total seconds; null for blank/invalid input.
+ *
+ * Strict on purpose: every field after the first must be 0–59, and anything else
+ * — a fourth field, `1:75`, `-0:30`, `1e3` — is rejected rather than guessed at.
+ * A lenient parse once read a 75-minute run typed as `1:15:00` as 75 *seconds*
+ * (it silently dropped the third field), and saved a pace that was off by 60×.
+ * A fractional final field is floored, as before.
+ */
 export function parseTime(text: string): number | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  const parts = trimmed.split(':');
-  if (parts.length === 1) {
-    const secs = Number(parts[0]);
-    return Number.isFinite(secs) && secs >= 0 ? Math.floor(secs) : null;
-  }
-  const mins = Number(parts[0]);
-  const secs = Number(parts[1]);
-  if (!Number.isFinite(mins) || !Number.isFinite(secs) || mins < 0 || secs < 0) {
-    return null;
-  }
-  return Math.floor(mins) * 60 + Math.floor(secs);
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.floor(Number(trimmed));
+  const match = /^(\d+):([0-5]?\d)(?::([0-5]\d))?(\.\d+)?$/.exec(trimmed);
+  if (!match) return null;
+  const [, first, second, third] = match;
+  return third === undefined
+    ? Number(first) * 60 + Number(second)
+    : Number(first) * 3600 + Number(second) * 60 + Number(third);
 }
 
 /** Total seconds → "m:ss" (seconds zero-padded); "" for null. */
@@ -90,7 +105,24 @@ export interface WeekEntry {
   workoutName: string; // denormalized (survives library rename/delete)
   muscleGroup: MuscleGroup; // denormalized
   trackTime?: boolean; // per-entry time-per-set tracking (older entries lack it)
-  sets: WorkoutSet[]; // length = number of sets; [] for cardio entries
+  /** Free-text note about how the session went. Always written — as '' when
+   *  there is none — because {@link WeekService.update} uses `updateDoc`, which
+   *  ignores a missing key and so could never clear a note the user removed.
+   *  (Firestore also rejects `undefined` outright.) Entries logged before this
+   *  field simply lack it, which reads the same as ''. */
+  notes?: string;
+  /**
+   * The local `YYYY-MM-DD` the note in {@link notes} was **originally** written,
+   * copied from {@link Workout.noteCreatedAt} when a standing note is carried
+   * into this session. `''` for a note first written on this entry, and for an
+   * entry with no note at all.
+   *
+   * Written under the same always-write-`''` rule as {@link notes}, and for the
+   * same reason: `updateDoc` ignores a missing key, so omitting it could never
+   * clear the date of a note the user just removed.
+   */
+  noteCreatedAt?: string;
+  sets: LoggedSet[]; // length = number of sets; [] for cardio entries
   /** Present only when `muscleGroup` is the reserved Cardio category. */
   cardio?: CardioLog;
   createdAt?: unknown; // Firestore serverTimestamp → newest on top
@@ -151,6 +183,23 @@ export function entryDate(weekId: string, day: number): string {
   const d = new Date(monday);
   d.setDate(d.getDate() + day);
   return toWeekId(d);
+}
+
+/**
+ * A local day id ('YYYY-MM-DD') as "Jun 16" — or "Jun 16, 2025" when it falls in
+ * a different year from `today`, since a note carried for fourteen months should
+ * say which June it means. '' for a blank or malformed id, so a caller can use
+ * the result itself as the "is there anything to show?" test.
+ */
+export function formatDayId(id: string, today = new Date()): string {
+  const date = parseDateId(id);
+  if (!date) return '';
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
 }
 
 /** e.g. "Jun 16 – Jun 22, 2026" for the week starting at `start` (a Monday). */
@@ -272,6 +321,41 @@ export class WeekService {
       date: entryDate(this.weekId(), data.day),
       createdAt: serverTimestamp(),
     });
+  }
+
+  /**
+   * Log several entries on one day at once — how a saved set is applied (see
+   * `apply-set.ts`).
+   *
+   * **One batch, one commit**, so a set can never land half-applied: a network
+   * failure part-way through a loop of `add()` calls would leave the user
+   * staring at three of their five exercises with no obvious way to finish.
+   *
+   * 🟠 `createdAt` is a **client** timestamp here, not `serverTimestamp()` as
+   * everywhere else, and deliberately: every write in a batch commits at the
+   * same instant, so server timestamps would tie and the day column
+   * (`orderBy('createdAt','desc')`) would fall back to random document ids —
+   * scrambling the order of the very routine the user saved. Counting *down*
+   * from now gives `entries[0]` the newest stamp, so the set renders top-to-
+   * bottom in the order it was written. The cost is that a badly-skewed client
+   * clock misorders these against individually-logged entries in the same
+   * column. That is display order only; nothing reads `createdAt` for meaning.
+   */
+  async addMany(data: Omit<WeekEntry, 'id' | 'createdAt'>[]): Promise<void> {
+    if (data.length === 0) return;
+    const uid = this.requireUid();
+    const weekId = this.weekId();
+    const batch = writeBatch(this.firestore);
+    const now = Date.now();
+    data.forEach((entry, index) => {
+      batch.set(doc(this.weekEntries(uid, weekId)), {
+        ...entry,
+        uid,
+        date: entryDate(weekId, entry.day),
+        createdAt: Timestamp.fromMillis(now - index),
+      });
+    });
+    await batch.commit();
   }
 
   async update(

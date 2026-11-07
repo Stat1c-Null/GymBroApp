@@ -1,0 +1,31 @@
+/* One exercise block inside the builder. Everything else it renders uses the
+   global form classes; only the block's own frame lives here. */
+:host {
+  display: block;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.item-position {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The chosen exercise has left the library — a caution, not an error: the set
+   still applies. */
+.item-missing {
+  margin-top: 0.4rem;
+  color: var(--text-secondary);
+}

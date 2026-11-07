@@ -20,19 +20,24 @@ project ID (`gymbroapp-7b680`). There doesn't appear to be a separate
 dev/staging Firebase project — local development reads and writes the same
 Firestore instance as production.
 
-**No Firestore security rules file exists in this repo** (no
-`firebase.json`, no `*.rules` file, no `firestore.indexes.json`). Rules are
-presumably managed directly in the Firebase console, or this repo simply
-doesn't include Firebase project config/deployment tooling. Either way,
-don't assume any server-side access control exists beyond what you can see
-in the console — the client-side `authGuard` only prevents unauthenticated
-*navigation* within this Angular app, it has no bearing on what Firestore
+**Security rules live in [`firestore.rules`](../../firestore.rules)** at the
+repo root, with `firebase.json` and `.firebaserc` beside it. Deploy them with
+`firebase deploy --only firestore:rules`, or paste the file into Firebase
+console → Firestore → Rules → Publish. They used to exist *only* in the console,
+which is how the friend body-weight rule went missing for a whole release — so
+change the file first, and keep it and the deployed rules in step.
+
+There is still no `firestore.indexes.json`: the one composite index this app
+needs is created from the console link that the first collection-group query
+surfaces (see [Cross-week analytics reads](#cross-week-analytics-reads-the-exception)).
+Note also that the client-side `authGuard` only prevents unauthenticated
+*navigation* within this Angular app — it has no bearing on what Firestore
 itself will accept.
 
 ## Document layout
 
 Almost everything is nested under `users/{uid}/...`. The **only** exceptions are
-the two top-level collections the Friends feature needs, because friend search
+the three top-level collections the Friends feature needs, because friend search
 has to read other people's names — see
 [Cross-user collections](#cross-user-collections-friends).
 
@@ -40,10 +45,13 @@ has to read other people's names — see
 users/{uid}
 ├── settings/preferences        (single doc)
 ├── workouts/{workoutId}        (collection)
+├── workoutSets/{setId}         (collection — reusable bundles of exercises)
+├── weekSets/{setId}            (collection — reusable Mon–Sun plans)
 ├── weights/{weightId}          (collection)
 └── weeks/{weekId}/entries/{entryId}   (sub-collection per week)
 
 userProfiles/{uid}              (top-level — the searchable directory)
+emailIndex/{email}              (top-level — exact-email lookup, get-only)
 friendships/{pairId}            (top-level — the friend graph)
 ```
 
@@ -84,6 +92,10 @@ The user's exercise library (`WorkoutService`). Shape (`Workout`):
                                  // settings.muscleGroups at the UI layer only
   usualWeight: number | null;   // ALWAYS pounds — see Weight unit handling
   maxWeight: number | null;
+  bodyWeight?: boolean;         // exercise loaded by the user's own body weight;
+                                 // when true both weights above are null — see below
+  note?: string;                // standing note, carried into the next session
+  noteCreatedAt?: string;       // local YYYY-MM-DD it was FIRST written
   createdAt: Timestamp;         // serverTimestamp()
 }
 ```
@@ -94,6 +106,252 @@ Ordered `orderBy('createdAt', 'desc')` — newest workout first.
 `WeeksComponent` (Weeks page) also writes it: logging a day's sets with a
 uniform weight different from the current value pushes that weight back onto
 the workout — see [Features → Weeks](./features.md#weeks-weekly-workout-logging).
+
+#### Body-weight exercises
+
+`bodyWeight: true` marks an exercise loaded by the user's own weight (pull-ups,
+dips). It is a **third mutually exclusive weight mode** alongside the normal
+usual/max pair and [Cardio](#the-cardio-category), and it *replaces* those two
+inputs in the form rather than adding to them — so `usualWeight`/`maxWeight` are
+always written as `null`, exactly like Cardio.
+
+The flag is optional: workouts saved before it existed simply lack the field,
+which reads the same as `false`. No migration, same trick as `Cardio` being
+absent from `settings.muscleGroups`.
+
+Nothing about the weight is stored on the *workout*. Logging one seeds every
+set's `weight` from the newest entry in
+[`users/{uid}/weights`](#usersuidweightsweightid) (canonical lbs, from that
+entry's own `lbs` field) and renders the field read-only — reps and time stay
+editable. An empty weight log is therefore a dead end, which
+`BodyWeightPromptComponent` fills inline rather than routing the user off to
+`/weights` — see [Features → Weights](./features.md#weights-body-weight-tracking).
+Two consequences worth knowing:
+
+- **Set weights are still plain stored numbers.** Analytics (1RM, volume, …)
+  and the entry summary need no special case; a logged body-weight set looks
+  like any other set that happens to weigh 176.4 lbs.
+- **The usual-weight write-back is skipped** for these
+  (`WeeksComponent.syncUsualWeight`, the same bail-out Cardio gets). Every set
+  agreeing on one weight would otherwise sync it into the library and freeze one
+  day's body weight there. Editing an old entry likewise keeps the weight it was
+  logged at, never today's — the log reflects reality at logging time.
+
+### `users/{uid}/workoutSets/{setId}`
+
+The user's saved **sets** — reusable bundles of exercises, for anyone who does
+the same session every week (`WorkoutSetService`). Applied to a day from the
+Weeks page; see [Features → Workout Sets](./features.md#workout-sets-reusable-days-and-weeks).
+
+🟠 **"Set" means two different things in this app, and the code keeps them
+apart.** `LoggedSet` (`week.service.ts`) is the gym sense — reps at a weight,
+one row of `WeekEntry.sets`. `WorkoutSet` (`workout-set.service.ts`) is *this*:
+a named group of exercises. The gym one used to be called `WorkoutSet`; it was
+renamed when this feature landed, precisely so a reader never has to guess which
+sense a `sets` field carries.
+
+Shape (`WorkoutSet`):
+
+```ts
+{
+  name: string;
+  description: string;         // always written, '' when none — see below
+  items: SetItem[];            // ordered
+  createdAt: Timestamp;        // serverTimestamp()
+}
+
+// SetItem — one exercise, and how it's meant to be done:
+{
+  workoutId: string;           // ref into users/{uid}/workouts (may dangle)
+  workoutName: string;         // denormalized copy
+  muscleGroup: string;         // denormalized copy
+  bodyWeight?: boolean;        // denormalized from Workout.bodyWeight — see below
+  trackTime?: boolean;
+  notes: string;               // always written, '' when none
+  sets: LoggedSet[];           // [] for a cardio item
+  cardio?: CardioLog;          // present only when muscleGroup is CARDIO_GROUP
+}
+```
+
+Ordered `orderBy('createdAt', 'desc')` — newest set first. Single-field, so
+**no composite index**, and the existing owner rule
+(`match /users/{userId}/{document=**}`) already covers it: **this feature needed
+no change to [`firestore.rules`](../../firestore.rules)**. Nothing about a set is
+readable across a friendship, and the collection-group rule matches `entries`
+only, so neither interacts with it.
+
+#### Items are an array, not a sub-collection
+
+A set is a handful of exercises, always read and written whole. One document
+means one read, one atomic write and no fan-out — and it is nowhere near
+Firestore's 1 MiB limit.
+
+🟠 **The footgun that buys:** Firestore rejects `undefined` outright. A top-level
+document gets away with loose optionals because the service builds its payload
+key by key — but an item lives *inside an array*, where an optional field the
+form left `undefined` reaches the write untouched and fails the whole save. So
+`WorkoutSetService.sanitizeItem` runs every item on the way in: optional keys are
+**omitted** rather than set to undefined, and `time`/`heartRate`/`elevation` are
+written as explicit `null`. Add a field to `SetItem` and it must go through
+there too.
+
+`description` and `notes` are **always written, as `''` when there is none** —
+the same reasoning as [Workout notes](#workout-notes): `update` uses `updateDoc`,
+which ignores a missing key, so omitting them could never *clear* one the user
+removed.
+
+#### Body weight is not stored in a set
+
+A body-weight item (`bodyWeight: true`) carries **no weight at all** — every
+`LoggedSet.weight` in it is `null`. A body weight is a fact about a *day*, not
+about a routine: capturing it here would freeze whatever the user weighed when
+they wrote the set down into every future week. `entriesFromSet`
+(`services/apply-set.ts`) fills it from the newest weigh-in at apply time
+instead, the same source [logging one by hand](#body-weight-exercises) uses.
+
+The flag is denormalized onto the item because applying a set must know without
+a library lookup — the exercise may have been deleted by then.
+
+#### Applying a set to a day
+
+`services/apply-set.ts` is pure (no Angular, no Firestore) and holds the three
+rules, each of which had an obvious-but-wrong alternative:
+
+1. **A collision skips that exercise; it doesn't fail the set.** The Weeks page
+   refuses the same workout twice on one day, and a set applied onto a
+   partly-logged day trips that. The rest go in and the caller names what didn't.
+2. **Body-weight exercises take today's weight** — above.
+3. **Nothing is written back to the exercise library.** The usual-weight
+   write-back (`WeeksComponent.syncUsualWeight`) is deliberately skipped: a set's
+   weights are an intention, not what was lifted, and a stale template would
+   quietly overwrite real progress. Editing the resulting entry afterwards goes
+   through the normal path and *does* sync. The note write-back is skipped for
+   the same reason — a set carrying a note is not the user re-asserting it today.
+4. **The set's own note wins; a standing note only fills a blank.** The optional
+   `NoteLookup` fifth argument carries
+   [standing exercise notes](#note-carry-over) in, so applying a set to a day
+   brings forward what you last said about each exercise. A note written into the
+   set itself outranks it. `entriesFromItems` is the one place this is decided,
+   so the day, week and single-day-of-a-week flows can't disagree; omit the
+   lookup and nothing is carried, exactly as before the feature existed.
+
+`setItemsFromEntries` is the inverse, backing "save this day as a set".
+
+The write itself is `WeekService.addMany` — **one `writeBatch`, one commit**, so
+a set can never land half-applied.
+
+🟠 That method writes a **client** `Timestamp` for `createdAt`, not
+`serverTimestamp()` as everywhere else, and deliberately: every write in a batch
+commits at the same instant, so server timestamps would tie and the day column
+(`orderBy('createdAt','desc')`) would fall back to random document ids —
+scrambling the order of the very routine the user saved. Counting *down* from
+`Date.now()` gives the first item the newest stamp. The cost is that a
+badly-skewed client clock misorders a set's entries against individually-logged
+ones in the same column. That is display order only; nothing reads `createdAt`
+for meaning.
+
+#### What a set does *not* track
+
+Muscle-group rename/delete does **not** cascade into saved sets.
+`SettingsService.commitGroupChange` batches workouts + settings only; extending
+it here would mean a read-modify-write of every set document for a nested array
+field. The consequence is contained: `SetItem.muscleGroup` is a denormalized
+display value, the builder offers the same `loggableGroups()` list the Weeks
+modal does (so an orphaned group lands in `Unassigned` rather than blanking the
+dropdown), and applying the set still works. Same spirit as
+[`WeekEntry.workoutName`](#denormalization--consistency) keeping the old name.
+
+A deleted *exercise* likewise leaves `workoutId` dangling. The set still applies
+— it remembers the name — and the builder labels the block ("no longer in your
+library") rather than emptying it.
+
+### `users/{uid}/weekSets/{setId}`
+
+The user's saved **week sets** — a whole Mon–Sun plan, for anyone on a fixed
+split (`WeekSetService`, `services/week-set.service.ts`). Loaded into a week from
+the Weeks page; see
+[Features → Workout Sets](./features.md#workout-sets-reusable-days-and-weeks).
+
+Where a [`WorkoutSet`](#usersuidworkoutsetssetid) is one session, a `WeekSet` is
+seven of them — or however many the user actually trains. Shape:
+
+```ts
+{
+  name: string;
+  description: string;         // always written, '' when none — same rule as WorkoutSet
+  days: WeekSetDay[];          // sorted by `day`, only non-empty days present
+  createdAt: Timestamp;        // serverTimestamp()
+}
+
+// WeekSetDay — one weekday of the plan:
+{
+  day: number;                 // 0 = Mon … 6 = Sun, same as WeekEntry.day
+  items: SetItem[];            // the *same* SetItem as a day set — see below
+}
+```
+
+Ordered `orderBy('createdAt', 'desc')`, single-field, so **no composite index**;
+the existing owner rule (`match /users/{userId}/{document=**}`) already covers it,
+so like the day-set collection this needed **no change to
+[`firestore.rules`](../../firestore.rules)**. Nothing is readable across a
+friendship.
+
+#### Its own collection, not a `kind` on `workoutSets`
+
+The alternative was one collection with a discriminator. It was rejected because
+the two shapes are read in different places for different reasons, and a
+discriminator would put a branch in front of every read of a feature that has
+none today — plus every pre-existing document would need a default for the
+missing field. Two collections cost one extra `toSignal` stream and nothing else.
+
+#### `SetItem` is reused verbatim, and so is `sanitizeItem`
+
+A week set stores the identical item shape a day set does — which is what makes
+the whole feature cheap: the builder, `entrySummary()`, the apply rules and the
+capture path all work on `SetItem` and needed no widening.
+
+🟠 That reuse extends to the write guard, and it has to.
+`WorkoutSetService.sanitizeItem` is **exported** rather than reimplemented here,
+because [the `undefined`-inside-an-array footgun](#items-are-an-array-not-a-sub-collection)
+bites a week set at **two** levels (`days[].items[]`), and a second copy of the
+rule would drift the moment a field is added to `SetItem`. `sanitizeDays` in
+`week-set.service.ts` maps every item of every day through it, drops days whose
+`items` are empty, and sorts what's left by `day`.
+
+#### Rest days are absent, not empty
+
+Only days with exercises are stored, so the document says what the plan *is*
+rather than padding it with five empty slots — and `days.length` is directly the
+"4 days" stat the `/sets` card shows. The consequence for readers: **never index
+`days` by weekday**; it is a list to iterate, and `WeekSetDay.day` is where the
+weekday lives.
+
+#### Applying a week to a week
+
+`entriesFromWeekSet` (`services/apply-set.ts`) is a loop over the day function,
+and the loop is the point: **the collision guard is rebuilt per day**, from that
+day's own entries. One `taken` set shared across the week would mean logging
+Bench Press on Monday silently swallowed the Thursday copy of it — which is the
+shape of an upper/lower split. The
+[three rules](#applying-a-set-to-a-day) otherwise apply unchanged, including
+body-weight items taking *today's* weigh-in on every day they appear.
+
+Skipped names are qualified with the weekday (`"Bench Press (Mon)"`), since the
+same exercise can collide on more than one day.
+
+Loading a week is **purely additive** — it never clears a day. Loading the same
+week set twice reports everything as skipped and writes nothing; there is
+deliberately no "replace this week" action.
+
+The write is `WeekService.addMany` **unchanged**: it already accepts entries with
+varying `day` values and stamps `date` per entry, so a whole week commits in one
+batch and can never land half-applied. Its descending
+`Timestamp.fromMillis(now - index)` only has to order entries *within* a column,
+so one flat index run across the week still orders every column correctly.
+
+`weekSetDaysFromEntries` is the inverse, backing "save this week as a set" — it
+buckets with `bucketByDay` and maps each non-empty day through the same
+`setItemsFromEntries` the day flow uses.
 
 ### `users/{uid}/weights/{weightId}`
 
@@ -127,6 +385,9 @@ Shape (`WeekEntry`):
   workoutName: string;         // denormalized copy — see below
   muscleGroup: string;         // denormalized copy — see below
   trackTime?: boolean;         // per-entry override of the global showSetTime setting
+  notes?: string;              // free-text note; always written, '' when none — see below
+  noteCreatedAt?: string;      // local YYYY-MM-DD that note was FIRST written; '' when
+                               // written on this session — see Note carry-over
   sets: {
     reps: number | null;
     weight: number | null;
@@ -149,6 +410,72 @@ Only the *current* week's entries are subscribed to at a time — the
 navigating Prev/Next week loads on demand rather than loading the user's
 entire history up front.
 
+#### Workout notes
+
+`notes` is a free-text note about how the session went, gated in the logging
+modal by a toggle that mirrors "Track time per set" — but with **no global
+default setting** behind it (see [Features → Weeks](./features.md#weeks-weekly-workout-logging)).
+It applies to cardio sessions as well as strength ones, so `WeeksComponent`
+builds it into the shared `base` object rather than the strength-only branch
+`trackTime` lives in.
+
+The field is **always written, as `''` when there is none**. That is not
+cosmetic: `WeekService.update` uses `updateDoc`, which ignores a key that isn't
+in the payload — so omitting `notes` could never *clear* a note the user just
+removed, and Firestore rejects `undefined` outright. Readers treat `''` and a
+missing field alike, so entries logged before the field existed need no
+migration, same as `trackTime`.
+
+#### Note carry-over
+
+A note doesn't stay on the session it was written on. It lives on the
+**exercise** ([`Workout.note`](#usersuidworkoutsworkoutid)) and is seeded into
+the log modal every time that exercise is picked — so a note written on Tuesday
+of one week is already there when the same workout comes round on Thursday of
+the next.
+
+Two fields, in two places, doing two different jobs:
+
+| Field | Where | What it is |
+|---|---|---|
+| `Workout.note` | the exercise | the **live** note — one per exercise, seeded on pick, overwritten on save |
+| `Workout.noteCreatedAt` | the exercise | local `YYYY-MM-DD` it was **first** written, held across revisions |
+| `WeekEntry.notes` | the session | a **snapshot** — what the note said on that day, never rewritten |
+| `WeekEntry.noteCreatedAt` | the session | where that snapshot came from; `''` when written on this session |
+
+The split is the whole feature, and it is what makes deletion safe: **clearing a
+note cannot reach backwards**. `Workout.note` is the only thing that changes;
+every session that already logged the note keeps its own copy, and re-opening one
+shows what it said then, not what the exercise says now.
+
+So there is deliberately **no separate "stop carrying this" control**: turning
+the note toggle off in the log modal and saving clears the exercise's note. That
+applies when editing an *old* session too — which is the one surprising case, so
+the toast says it out loud ("Note cleared from Bench Press.").
+
+`WeeksComponent.syncWorkoutNote` does the write-back, positioned and shaped like
+`syncUsualWeight`: after the log is saved, never failing it, and skipped entirely
+when the text is unchanged — the common case is a carried note logged again
+untouched, which must not cost a write. It calls **`WorkoutService.setNote`**,
+not `update`: `syncUsualWeight` may have just written a new `usualWeight`, and a
+whole-document write built from the component's stale copy would revert it.
+
+**Dates are the session's, not the clock's.** A new note is stamped with
+`entryDate(weekId, day)` — the day it describes — so annotating last Tuesday
+dates the note to last Tuesday. Revising a carried note keeps the original date:
+"I've been working around this since June" is the fact worth keeping, and a date
+that reset on every edit couldn't state it.
+
+Both fields are optional and both are written as `''` rather than omitted, for
+exactly the reason `notes` is. Exercises and entries that predate them need no
+migration.
+
+Applying a **saved set** carries notes too, but the set's own
+[`SetItem.notes`](#usersuidworkoutsetssetid) wins — a note written into a routine
+("pause at the bottom") is a deliberate instruction and outranks a standing
+observation. A blank item note is filled from the exercise's. See
+[Applying a set to a day](#applying-a-set-to-a-day), rule 4.
+
 ### Cross-week analytics reads (the exception)
 
 The *exercise* analytics card (`/analytics`) needs every logged entry across all
@@ -161,23 +488,30 @@ both set by the service on write (`WeekService.add`/`update`):
 
 - **`uid`** — Firestore can't scope a collection group to one user by path, so the
   owner is stored on the doc and used both as the query filter and as the security
-  rule's guard.
+  rule's guard. Because the read rule trusts this field, the write rule for
+  `users/{userId}/**` refuses any document whose `uid` is not `userId`
+  (`stampsOnlyOwner`). Without that, a user could log an entry in their *own* tree
+  stamped with someone else's uid and it would appear in that person's analytics.
 - **`date`** — the logical local `YYYY-MM-DD` (that week's Monday + `day`), so
   analytics gets a stable timeline value without unwrapping the pending
   `serverTimestamp`.
 
-Two pieces of **Firebase-console** setup this repo can't ship (no rules/index files):
+Two pieces of setup beyond the app code:
 
 1. A **collection-group index** on `entries.uid` — the first query run surfaces a
-   console link that creates the exact index.
-2. A **security rule** permitting the owner-scoped collection-group read, e.g.
+   console link that creates the exact index. This one genuinely is console-only;
+   the repo ships no `firestore.indexes.json`.
+2. A **security rule** permitting the owner-scoped collection-group read. That one
+   *is* in the repo, in [`firestore.rules`](../../firestore.rules):
    `match /{path=**}/entries/{entryId} { allow read: if resource.data.uid == request.auth.uid; }`.
 
 **Back-fill for old entries:** entries logged before this feature lack `uid`/`date`,
 so they'd be invisible to the query. `EntryBackfillService` stamps them once — an
 **additive, idempotent** migration (only `batch.update`s the two fields, skips
-already-stamped docs) triggered from the Analytics page on first open and gated by a
-persisted `settings.entriesBackfilledAt` flag. It finds entries by walking weekIds
+already-stamped docs) triggered from an `effect` on the Analytics page **and** the
+Dashboard (both render the Totals card) via `EntryBackfillService.ensureBackfilled()`,
+which holds the once-per-session guard, and gated by a persisted
+`settings.entriesBackfilledAt` flag. It finds entries by walking weekIds
 deterministically (Monday → Monday from the account's earliest activity), which
 sidesteps the Firestore "phantom parent" problem (a `weeks/{weekId}` parent doc may
 not exist even when its `entries` sub-collection does).
@@ -186,7 +520,7 @@ not exist even when its `entries` sub-collection does).
 
 The per-user tree above structurally cannot support friend search: finding
 someone means reading a document that isn't yours. So the Friends feature adds
-the app's only two top-level collections. Nothing about a user's workouts, weight
+the app's only three top-level collections. Nothing about a user's workouts, weight
 or settings leaves `users/{uid}` — only what's needed to find and label a person.
 
 ### `userProfiles/{uid}` — the searchable directory
@@ -198,11 +532,20 @@ Owned by `UserProfileService`. Shape (`UserProfile` in `services/friends.ts`):
   uid: string;
   displayName: string;       // shown in search results and friend lists
   displayNameLower: string;  // prefix-search key
-  emailLower: string;        // exact-match search key — NEVER rendered
   createdAt: Timestamp;      // first write only
   updatedAt: Timestamp;
 }
 ```
+
+**No email address.** Every signed-in user can read every profile, and a rule
+cannot hide one field of a readable document, so anything stored here is public to
+all users. Profiles used to carry `emailLower` "for matching, never rendered" —
+but it was in every directory response, so anyone could page through the
+directory and collect every address. The rule now refuses any key outside
+`uid, displayName, displayNameLower, createdAt, updatedAt`, and `syncProfile`
+deletes a leftover `emailLower` on the owner's next sign-in. 🟠 Profiles of users
+who never sign in again keep it until removed server-side (a one-off Admin SDK
+script: delete `emailLower` from every `userProfiles` doc).
 
 Upserted by an `effect()` on `AuthService.currentUser`, and only when a field
 would actually change — signing in shouldn't cost a write on every page load.
@@ -219,10 +562,9 @@ all **single-field**, so all auto-indexed with no composite index:
 - **empty term** → `orderBy('displayNameLower')`, paged. Browsing the whole
   directory is the fallback when prefix search can't help (you don't know the
   spelling), and the fastest way to answer "does this person have a profile yet?"
-- **email** (term contains `@`) → `where('emailLower', '==', term)`, unpaged —
-  there's at most one hit. **No `orderBy` on this path**: pairing an equality
-  filter with a sort on a *different* field is exactly what forces a composite
-  index.
+- **email** (term contains `@`) → one `get` of `emailIndex/{term}` → uid →
+  `profileFor(uid)`, unpaged — there's at most one hit. See
+  [`emailIndex`](#emailindexemail--exact-email-lookup) below.
 - **name** → `where('displayNameLower', '>=', term)` +
   `where('displayNameLower', '<=', term + PREFIX_SENTINEL)`, paged. The range
   filter and the sort are on the same field, so it stays single-field.
@@ -247,9 +589,36 @@ so Previous jumps straight back instead of re-walking from page one. Note that
 the signed-in user is filtered out of results *client-side*, after the read, so a
 page can legitimately show 19 rows.
 
+### `emailIndex/{email}` — exact-email lookup
+
+Owned by `UserProfileService`. The document id is the lowercased address
+(`emailIndexId()` in `services/friends.ts`); the body is just `{ uid }`.
+
+Two rules make it safe where `emailLower` on profiles was not:
+
+- **`get` only, `list` never.** You can resolve an address you already know;
+  you cannot enumerate addresses.
+- **Writable only for the caller's own address**:
+  `email == request.auth.token.email.lower()`. The address comes from the Firebase
+  Auth token, not from anything the client writes, so nobody can register someone
+  else's email to be found in their place.
+
+`syncProfile` writes it on sign-in when missing or pointing at another uid. An
+address containing `/` (legal, vanishingly rare) can't be a document id and is
+simply not indexed. Changing your email leaves the old entry behind, still mapping
+the old address to you.
+
 ### `friendships/{pairId}` — the friend graph
 
 Owned by `FriendService`. `pairId = [uidA, uidB].sort().join('_')`.
+
+**The rules enforce that id.** `create` requires the document id to equal
+`pairId(members[0], members[1])` with two distinct members, and
+`isAcceptedFriend` also checks that both users are in `members`. Before this, a
+user could create `friendships/{pairId(self, victim)}` listing a second account of
+their own as the other member, accept it from that account, and pass
+`isAcceptedFriend(victim)` — reading the victim's weeks and weights without the
+victim ever seeing a request.
 
 ```ts
 {
@@ -286,8 +655,8 @@ client-side.
 Friends can open each other's **logged week** and **body-weight log** from the
 Friends page. Nothing is copied to do it: `WeekService.entriesFor(uid, weekId)`
 and `WeightService.recentFor(uid)` run the *same* queries the Weeks and Weight
-pages run, just against another uid, and the rules below decide whether it is
-allowed.
+pages run, just against another uid, and [`firestore.rules`](../../firestore.rules)
+decides whether it is allowed.
 
 That makes the security rule the only gate — which is why the client treats a
 failed read as its own state. Both panels distinguish three outcomes, where the
@@ -302,6 +671,11 @@ Exactly two subtrees open up, both read-only:
 | `users/{uid}/weeks/*/entries` | `FriendWeekComponent` — the whole week, any week |
 | `users/{uid}/weights` | `FriendWeightComponent` — the last `RECENT_WEIGHTS` weigh-ins |
 
+Note that a week entry now carries a free-text `notes` field, so **an accepted
+friend can read your workout notes**, and `WeekGridComponent` renders them in the
+friend panel exactly as it does on your own Weeks page. There is no per-note
+privacy control; hiding them in the UI would not change what the rule permits.
+
 The weight window is bounded in the *query* (`orderBy` + `limit`), which is a
 product decision, not a security boundary — the rule permits the whole
 collection, so a wider `limit` would return more. Narrow the rule if that ever
@@ -315,75 +689,26 @@ now discloses body weight, with no per-field opt-out and no indication to the
 owner that someone looked. If that should be optional, the natural home is a flag
 on `userProfiles/{uid}` checked in the rule alongside `isAcceptedFriend`.
 
-### Firebase-console setup this repo can't ship
+### Deploying the rules
 
-Same situation as the collection-group index above — no rules file lives here.
-🟠 These rules are a reviewed starting point, not verified code: check them in the
-Rules Playground before trusting them. The friend-read rule in particular is
-worth exercising from all three sides — owner, accepted friend, and a stranger.
+The ruleset lives at [`firestore.rules`](../../firestore.rules) in the repo root.
+Read it *there* rather than duplicating it here, so the two can't disagree.
+`firebase.json` points at that file and `.firebaserc` pins the project, so
+`firebase deploy --only firestore:rules` is the whole deploy; pasting the file
+into Firebase console → Firestore → Rules → Publish works just as well.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+🟠 The rules are reviewed, not verified. Exercise the friend-read rules in the
+Rules Playground from all three sides — owner, accepted friend, and a stranger —
+before trusting a change to them.
 
-    // Sorted-pair friendship id, matching friendshipId() in services/friends.ts.
-    function pairId(a, b) {
-      return a < b ? a + '_' + b : b + '_' + a;
-    }
+**A new cross-user read means editing that file in the same change.** The friend
+body-weight panel shipped without its `users/{userId}/weights/{entryId}` rule and
+was dead on arrival: friends' weeks loaded, friends' weights were refused. A rule
+that exists only in prose is a rule that isn't deployed.
 
-    // Is the signed-in user an *accepted* friend of otherUid? exists() first:
-    // get() on a missing document yields null, and reading .data off it fails.
-    function isAcceptedFriend(otherUid) {
-      let path = /databases/$(database)/documents/friendships/$(pairId(request.auth.uid, otherUid));
-      return exists(path) && get(path).data.status == 'accepted';
-    }
-
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // A friend's logged week — read-only. Rules are OR-ed with the owner rule
-    // above, so this only ever adds access.
-    match /users/{userId}/weeks/{weekId}/entries/{entryId} {
-      allow read: if request.auth != null && isAcceptedFriend(userId);
-    }
-
-    // A friend's body-weight log — read-only.
-    match /users/{userId}/weights/{entryId} {
-      allow read: if request.auth != null && isAcceptedFriend(userId);
-    }
-
-    match /{path=**}/entries/{entryId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-    }
-
-    match /userProfiles/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    match /friendships/{pairId} {
-      allow read:   if request.auth.uid in resource.data.members;
-      allow create: if request.auth.uid == request.resource.data.requesterUid
-                    && request.auth.uid in request.resource.data.members
-                    && request.resource.data.members.size() == 2
-                    && request.resource.data.status == 'pending';
-      // Only the recipient can accept, and only pending → accepted.
-      allow update: if request.auth.uid in resource.data.members
-                    && request.auth.uid != resource.data.requesterUid
-                    && resource.data.status == 'pending'
-                    && request.resource.data.status == 'accepted'
-                    && request.resource.data.members == resource.data.members;
-      allow delete: if request.auth.uid in resource.data.members;
-    }
-  }
-}
-```
-
-Note what the `update` rule buys beyond "only the recipient accepts": because a
-`setDoc` onto an existing document counts as an update, it also refuses to
-re-open an already-accepted friendship as pending.
+Note what the friendship `update` rule buys beyond "only the recipient accepts":
+because a `setDoc` onto an existing document counts as an update, it also refuses
+to re-open an already-accepted friendship as pending.
 
 `isAcceptedFriend` reads a second document, but only once per *query*, not once
 per entry — the condition depends on the path and `get()`, never on
@@ -391,9 +716,9 @@ per entry — the condition depends on the path and `get()`, never on
 all.
 
 Any signed-in user can read any profile — that is the deliberate price of search.
-It is why `emailLower` is stored lowercased for matching but never rendered, and
-why the published `displayName` falls back to the email's local part rather than
-the whole address.
+It is why profiles hold no email at all (lookup goes through the get-only
+`emailIndex`), and why the published `displayName` falls back to the email's local
+part rather than the whole address.
 
 ## Denormalization & consistency
 

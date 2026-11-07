@@ -5,6 +5,7 @@ import {
   distanceToCanonical,
   displayElevation,
   elevationToCanonical,
+  formatDuration,
   formatPace,
 } from './cardio';
 
@@ -89,5 +90,29 @@ describe('formatPace', () => {
   it('returns null when distance is zero or negative', () => {
     expect(formatPace(600, 0, 'mi')).toBeNull();
     expect(formatPace(600, -1, 'mi')).toBeNull();
+  });
+});
+
+describe('formatDuration', () => {
+  it('renders hours and minutes past an hour', () => {
+    expect(formatDuration(45_000)).toBe('12h 30m');
+  });
+
+  it('drops the hours part under an hour', () => {
+    expect(formatDuration(2700)).toBe('45m');
+  });
+
+  it('drops seconds rather than carrying them', () => {
+    expect(formatDuration(3659)).toBe('1h 0m');
+  });
+
+  it('stays readable at totals scale, where formatTime would not', () => {
+    // 40 hours — "2400:00" as m:ss.
+    expect(formatDuration(144_000)).toBe('40h 0m');
+  });
+
+  it('renders an em dash for null and 0m for nothing logged', () => {
+    expect(formatDuration(null)).toBe('—');
+    expect(formatDuration(0)).toBe('0m');
   });
 });

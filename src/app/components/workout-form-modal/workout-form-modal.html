@@ -27,18 +27,37 @@
     </div>
 
     @if (muscleGroup !== cardioGroup) {
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="workout-usual">Usual weight ({{ unit() }})</label>
-          <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
-            [(ngModel)]="usualWeight" name="usualWeight" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="workout-max">Max weight ({{ unit() }})</label>
-          <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
-            [(ngModel)]="maxWeight" name="maxWeight" />
-        </div>
+      <!-- Body-weight exercises are loaded by the user's own weight, so they
+           replace the usual/max weight inputs entirely. -->
+      <div class="form-group setting-item">
+        <span class="setting-label">Body weight</span>
+        <button type="button" class="theme-switch" [class.active]="bodyWeight"
+          (click)="bodyWeight = !bodyWeight" [attr.aria-pressed]="bodyWeight"
+          aria-label="Toggle body weight exercise">
+          <span class="switch-knob"></span>
+        </button>
       </div>
+
+      @if (bodyWeight) {
+        <p class="form-hint mb-2">
+          Sets are filled in with your latest logged body weight — no weight to enter.
+        </p>
+        <!-- Renders only when there's no weigh-in to fill those sets from. -->
+        <app-body-weight-prompt />
+      } @else {
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="workout-usual">Usual weight ({{ unit() }})</label>
+            <input class="form-input" id="workout-usual" type="number" min="0" placeholder="0"
+              [(ngModel)]="usualWeight" name="usualWeight" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="workout-max">Max weight ({{ unit() }})</label>
+            <input class="form-input" id="workout-max" type="number" min="0" placeholder="0"
+              [(ngModel)]="maxWeight" name="maxWeight" />
+          </div>
+        </div>
+      }
     }
 
     <button type="submit" class="btn btn-primary btn-full mt-2" id="save-workout-btn" [disabled]="saving()">

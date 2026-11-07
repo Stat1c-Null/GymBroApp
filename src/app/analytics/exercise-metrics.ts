@@ -177,8 +177,16 @@ export interface FrequencyStats {
   perWeek: number;
   /** Distinct calendar weeks (Monday-anchored) trained. */
   weeksTrained: number;
-  /** Weeks the window spans — the denominator for consistency. */
+  /** The window's length in weeks (`ceil(days / 7)`) — the denominator for {@link perWeek}. */
   weeksInRange: number;
+  /**
+   * Calendar weeks (Monday-anchored) the window touches, partial weeks included —
+   * the denominator for consistency. It must count the same unit as
+   * {@link weeksTrained}: a 30-day window starting on a Saturday touches 6
+   * calendar weeks but is only 5 weeks long, and dividing by the latter showed
+   * "6 / 5" weeks trained.
+   */
+  weeksSpanned: number;
 }
 
 /** Monday (local midnight) of the week containing `x`. Pure — no service import. */
@@ -206,7 +214,8 @@ export function computeFrequency(
   const from = start ?? (days.length ? days[0] : now);
   const weeksInRange = Math.max(1, Math.ceil(daysBetween(from, now) / 7));
   const perWeek = sessions / weeksInRange;
-  return { sessions, perWeek, weeksTrained, weeksInRange };
+  const weeksSpanned = Math.round(daysBetween(mondayMs(from), mondayMs(now)) / 7) + 1;
+  return { sessions, perWeek, weeksTrained, weeksInRange, weeksSpanned };
 }
 
 /**

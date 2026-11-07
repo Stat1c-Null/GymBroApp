@@ -6,6 +6,7 @@ import {
   QueryConstraint,
   QueryDocumentSnapshot,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -18,7 +19,7 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
-import { PREFIX_SENTINEL, UserProfile, parseSearchTerm } from './friends';
+import { PREFIX_SENTINEL, UserProfile, emailIndexId, parseSearchTerm } from './friends';
 
 /** How many people to show at once, browsing or searching. */
 export const PROFILE_PAGE_SIZE = 20;
@@ -81,8 +82,8 @@ export class UserProfileService {
    *   search can't find someone whose spelling you don't know, and because it
    *   answers "does this person have a profile at all yet?".
    * - **Term containing `@`** — exact email match, unpaged: there can only be one
-   *   hit. No `orderBy` on this path on purpose — pairing an equality filter with
-   *   a sort on a *different* field would demand a composite index.
+   *   hit. A single `get` of `emailIndex/{email}` → uid → profile. Emails are not
+   *   stored on profiles, which everyone can list (see {@link UserProfile}).
    * - **Anything else** — display-name prefix. Its range filter and its sort are
    *   on the same field, so this stays single-field too.
    *
@@ -96,27 +97,25 @@ export class UserProfileService {
     after: ProfileCursor | null = null
   ): Promise<ProfilePage> {
     const parsed = parseSearchTerm(term);
-    const profiles = collection(this.firestore, 'userProfiles');
-    const constraints: QueryConstraint[] = [];
 
     if (parsed.kind === 'email' && parsed.value) {
-      constraints.push(
-        where('emailLower', '==', parsed.value),
-        limit(PROFILE_PAGE_SIZE)
-      );
-    } else {
-      if (parsed.value) {
-        constraints.push(
-          where('displayNameLower', '>=', parsed.value),
-          where('displayNameLower', '<=', parsed.value + PREFIX_SENTINEL)
-        );
-      }
-      constraints.push(orderBy('displayNameLower'));
-      if (after) constraints.push(startAfter(after));
-      // Ask for one row more than a page: whether that row comes back is what
-      // tells us a next page exists, with no separate count query.
-      constraints.push(limit(PROFILE_PAGE_SIZE + 1));
+      const profile = await this.profileForEmail(parsed.value);
+      return { profiles: profile ? [profile] : [], next: null };
     }
+
+    const profiles = collection(this.firestore, 'userProfiles');
+    const constraints: QueryConstraint[] = [];
+    if (parsed.value) {
+      constraints.push(
+        where('displayNameLower', '>=', parsed.value),
+        where('displayNameLower', '<=', parsed.value + PREFIX_SENTINEL)
+      );
+    }
+    constraints.push(orderBy('displayNameLower'));
+    if (after) constraints.push(startAfter(after));
+    // Ask for one row more than a page: whether that row comes back is what
+    // tells us a next page exists, with no separate count query.
+    constraints.push(limit(PROFILE_PAGE_SIZE + 1));
 
     const snapshot = await getDocs(query(profiles, ...constraints));
     const hasMore = snapshot.docs.length > PROFILE_PAGE_SIZE;
@@ -138,38 +137,52 @@ export class UserProfileService {
     return this.remember(snapshot.id, snapshot.data());
   }
 
+  /** The profile of whoever owns `email` exactly, or `null` if nobody does. */
+  private async profileForEmail(email: string): Promise<UserProfile | null> {
+    const id = emailIndexId(email);
+    if (!id) return null;
+    const entry = await getDoc(doc(this.firestore, 'emailIndex', id));
+    const uid = entry.exists() ? (entry.data()['uid'] as string | undefined) : undefined;
+    return uid ? this.profileFor(uid) : null;
+  }
+
   /**
-   * Write the signed-in user's directory entry, but only when it would actually
-   * change — signing in shouldn't cost a write on every page load.
+   * Write the signed-in user's directory entry and email-index entry, but only
+   * when they would actually change — signing in shouldn't cost a write on every
+   * page load.
+   *
+   * Profiles written by older versions carried an `emailLower` field, readable by
+   * every signed-in user. It is deleted here on the owner's next sign-in (the
+   * security rules no longer accept a profile that still has it).
    */
   private async syncProfile(user: User): Promise<void> {
     try {
       const displayName = profileNameFor(user);
-      const emailLower = (user.email ?? '').toLowerCase();
       const ref = doc(this.firestore, 'userProfiles', user.uid);
 
       const snapshot = await getDoc(ref);
+      const hasLegacyEmail = snapshot.exists() && 'emailLower' in snapshot.data();
       const existing = snapshot.exists()
         ? this.remember(snapshot.id, snapshot.data())
         : null;
-      if (
-        existing &&
-        existing.displayName === displayName &&
-        existing.emailLower === emailLower
-      ) {
-        return;
+
+      if (!existing || existing.displayName !== displayName || hasLegacyEmail) {
+        const profile: UserProfile = {
+          uid: user.uid,
+          displayName,
+          displayNameLower: displayName.toLowerCase(),
+          ...(existing ? {} : { createdAt: serverTimestamp() }),
+          updatedAt: serverTimestamp(),
+        };
+        await setDoc(
+          ref,
+          { ...profile, ...(hasLegacyEmail ? { emailLower: deleteField() } : {}) },
+          { merge: true }
+        );
+        this.cache.set(user.uid, profile);
       }
 
-      const profile: UserProfile = {
-        uid: user.uid,
-        displayName,
-        displayNameLower: displayName.toLowerCase(),
-        emailLower,
-        ...(existing ? {} : { createdAt: serverTimestamp() }),
-        updatedAt: serverTimestamp(),
-      };
-      await setDoc(ref, profile, { merge: true });
-      this.cache.set(user.uid, profile);
+      await this.syncEmailIndex(user);
     } catch (err) {
       // Nothing the user can act on mid-sign-in, and the only consequence is
       // that they aren't findable in search — so log it rather than interrupt.
@@ -177,9 +190,23 @@ export class UserProfileService {
     }
   }
 
-  /** Cache a document's data as a profile, with `uid` taken from the doc id. */
+  /** Point `emailIndex/{email}` at this user, unless it already does. */
+  private async syncEmailIndex(user: User): Promise<void> {
+    const id = emailIndexId(user.email);
+    if (!id) return;
+    const ref = doc(this.firestore, 'emailIndex', id);
+    const entry = await getDoc(ref);
+    if (entry.exists() && entry.data()['uid'] === user.uid) return;
+    await setDoc(ref, { uid: user.uid });
+  }
+
+  /**
+   * Cache a document's data as a profile, with `uid` taken from the doc id. A
+   * legacy `emailLower` is dropped so it can never reach the UI.
+   */
   private remember(uid: string, data: DocumentData): UserProfile {
-    const profile = { ...(data as unknown as UserProfile), uid };
+    const { emailLower: _legacyEmail, ...rest } = data;
+    const profile = { ...(rest as unknown as UserProfile), uid };
     this.cache.set(uid, profile);
     return profile;
   }

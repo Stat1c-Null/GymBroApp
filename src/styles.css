@@ -186,6 +186,14 @@ a:hover {
   box-shadow: 0 0 0 3px hsla(0, 80%, 60%, 0.15);
 }
 
+/* Multi-line companion to .form-input — pair the two classes on a <textarea>
+   so the input chrome stays defined in exactly one place. */
+.form-textarea {
+  min-height: 4.5rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .form-label {
   display: block;
   font-size: 0.85rem;
@@ -202,6 +210,56 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Explanatory line under a field ("Pace: 6:00 /mi", "no weight to enter").
+   Shared: the Weeks logging modal and the create-workout modal. */
+.form-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* Label for a toggle sitting inside a modal form (".setting-item" card +
+   ".theme-switch" are just below). Shared: the Weeks logging modal and the set
+   builder. Only the label needs styling — .setting-text is scoped to the
+   Settings page. */
+.modal-toggle-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Inline "Create new workout" link under a muscle-group select — a plain text
+   button (no button chrome) that opens the shared create-workout modal.
+   Shared: the Weeks logging modal and the set builder. */
+.create-workout-link {
+  margin-top: 0.4rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  cursor: pointer;
+}
+
+.create-workout-link:hover {
+  text-decoration: underline;
+}
+
+/* Quiet "Details →" link in an analytics-card header's actions slot — the
+   Dashboard's summary cards point at their full page with it instead of
+   carrying button chrome. Shared: dashboard cards, compact burndown/totals. */
+.card-link {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  white-space: nowrap;
+}
+
+.card-link:hover {
+  text-decoration: underline;
 }
 
 /* ---- Buttons ---- */
@@ -405,9 +463,41 @@ a:hover {
   padding: 2rem;
   width: 90%;
   max-width: 420px;
+  /* Never taller than the viewport. Without this a tall modal simply spills
+     off both ends of the fixed overlay with no way to reach what's cut off. */
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   transform: scale(0.92) translateY(10px);
   transition: transform var(--transition-normal);
+}
+
+/* ModalComponent's shell. It owns a .modal-body, so the ✕ and the heading stay
+   pinned and only the content scrolls; the shell itself never does. Hand-rolled
+   modals (login's password reset) skip this and scroll as a whole. */
+.modal-content.modal-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-body {
+  min-height: 0; /* a flex child won't shrink below its content without this */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Bleed back into the shell's padding so focus rings on edge controls aren't
+     clipped by the scroll container. */
+  margin: -0.35rem;
+  padding: 0.35rem;
+}
+
+/* Opt-in (ModalComponent's `wide` input) for modals that lay their content out
+   in columns. Below this breakpoint they stay the standard single-column size. */
+@media (min-width: 900px) {
+  .modal-content.modal-wide {
+    max-width: min(1500px, 95vw);
+  }
 }
 
 .modal-overlay.visible .modal-content {

@@ -1,0 +1,27 @@
+<app-analytics-card
+  title="Today"
+  [subtitle]="dateLabel()"
+  [state]="state()"
+  emptyMessage="Nothing logged today yet."
+>
+  <a actions class="card-link" routerLink="/weeks" (click)="openWeek()">Open week →</a>
+  <a empty-action class="btn btn-secondary" routerLink="/weeks" (click)="openWeek()">Go to This Week</a>
+
+  <ul class="today-list">
+    @for (e of entries(); track e.id) {
+      <li class="today-entry">
+        <div class="today-entry-head">
+          <span class="today-entry-name">{{ e.workoutName }}</span>
+          <span class="today-entry-group">{{ e.muscleGroup }}</span>
+        </div>
+        <span class="today-entry-sets">{{ summaryOf(e) }}</span>
+        @if (e.notes) {
+          <p class="today-entry-notes">{{ e.notes }}</p>
+          @if (noteOrigin(e); as since) {
+            <span class="today-entry-note-origin">Noted {{ since }}</span>
+          }
+        }
+      </li>
+    }
+  </ul>
+</app-analytics-card>

@@ -1,0 +1,83 @@
+<div class="item-head">
+  <span class="item-position">Exercise {{ position() }}</span>
+  <button type="button" class="list-action list-delete" (click)="remove.emit()"
+    [attr.aria-label]="'Remove exercise ' + position()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+    </svg>
+  </button>
+</div>
+
+<div class="form-group">
+  <label class="form-label" [attr.for]="idPrefix() + '-muscle'">Muscle group</label>
+  <select class="form-input" [attr.id]="idPrefix() + '-muscle'" [ngModel]="item().muscleGroup()"
+    (ngModelChange)="onGroupChange($event)" [name]="idPrefix() + '-muscle'">
+    @for (group of muscleGroups(); track group) {
+      <option [value]="group">{{ group }}</option>
+    }
+  </select>
+  <button type="button" class="create-workout-link" (click)="createWorkout.emit()">
+    + Create new workout
+  </button>
+</div>
+
+<div class="form-group">
+  <label class="form-label" [attr.for]="idPrefix() + '-workout'">Workout</label>
+  @if (filteredWorkouts().length) {
+    <select class="form-input" [attr.id]="idPrefix() + '-workout'" [ngModel]="item().workoutId()"
+      (ngModelChange)="onWorkoutChange($event)" [name]="idPrefix() + '-workout'">
+      <option value="" disabled>Select a workout…</option>
+      @for (w of filteredWorkouts(); track w.id) {
+        <option [value]="w.id">{{ w.name }}</option>
+      }
+    </select>
+  } @else {
+    <p class="form-hint">
+      No {{ item().muscleGroup() }} workouts yet — use “Create new workout” above.
+    </p>
+  }
+  @if (missing()) {
+    <!-- Deleted from the library since this set was saved. The set still
+         applies — it remembers the name — so say so rather than blanking it. -->
+    <p class="form-hint item-missing">
+      “{{ item().name() }}” is no longer in your library. This set still adds it; pick another
+      exercise to replace it.
+    </p>
+  }
+</div>
+
+@if (item().workoutId()) {
+  @if (isCardio()) {
+    <!-- Written out long-hand rather than [(…)]: the target is a signal reached
+         through a property access, so `.set()` is spelled out to leave no doubt
+         about where the value lands. -->
+    <app-cardio-fields [idPrefix]="idPrefix()"
+      [timeText]="item().cardioTimeText()" (timeTextChange)="item().cardioTimeText.set($event)"
+      [distance]="item().cardioDistance()" (distanceChange)="item().cardioDistance.set($event)"
+      [heartRate]="item().cardioHeartRate()" (heartRateChange)="item().cardioHeartRate.set($event)"
+      [elevation]="item().cardioElevation()" (elevationChange)="item().cardioElevation.set($event)" />
+  } @else {
+    <app-set-rows-editor [rows]="item().rows()"
+      [trackTime]="item().trackTime()" (trackTimeChange)="item().trackTime.set($event)"
+      [bodyWeight]="item().bodyWeight()" [template]="true" [idPrefix]="idPrefix()"
+      (countChange)="onCountChange($event)" />
+  }
+
+  <div class="form-group setting-item">
+    <span class="modal-toggle-label">Add a note</span>
+    <button type="button" class="theme-switch" [class.active]="item().hasNotes()" (click)="toggleNotes()"
+      [attr.aria-pressed]="item().hasNotes()" aria-label="Toggle a note for this workout">
+      <span class="switch-knob"></span>
+    </button>
+  </div>
+
+  @if (item().hasNotes()) {
+    <div class="form-group">
+      <label class="form-label" [attr.for]="idPrefix() + '-notes'">Note</label>
+      <textarea class="form-input form-textarea" [attr.id]="idPrefix() + '-notes'" rows="2" maxlength="500"
+        placeholder="e.g. slow negatives" [ngModel]="item().notes()"
+        (ngModelChange)="item().notes.set($event)" [name]="idPrefix() + '-notes'"></textarea>
+    </div>
+  }
+}

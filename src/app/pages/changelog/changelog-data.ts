@@ -6,6 +6,43 @@ import type { ChangelogEntry } from '../../components/changelog-entry/changelog-
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 6,
+    date: '2026-10-11',
+    changes: [
+      'A new Dashboard: a slim greeting bar with quick links, then your Progress — the weight burndown and training totals side by side, sharing one date range — with a "Details →" link to the full Analytics page. The two cards are always the same height.',
+      'The Dashboard has a Today card listing everything you\'ve logged today, with sets, notes and when each note was first written. "Open week →" jumps straight to this week.',
+      'The Dashboard also shows the latest changelog entry under "What\'s new", with a link to all updates.',
+      'Cardio durations can now be entered as h:mm:ss, so a long run like 1:15:00 is saved as 75 minutes rather than 75 seconds. Times that don\'t make sense, like 1:75, are rejected instead of guessed at.',
+      'Weight burndown: moving away from your goal (gaining on a cut, or losing on a bulk) no longer counts as progress toward it.',
+      'Muscle progress: "weeks trained" now compares against the calendar weeks in your range, so it can no longer show something like 6 / 5.',
+      'Totals now use each exercise\'s and muscle group\'s current name, so renaming one no longer splits its history into two rows. Exercises in a group you\'ve deleted are listed as Unassigned.',
+      'Privacy: your email address is no longer stored on your public profile. People can still find you by typing your exact email, but nobody can browse other users\' addresses. Your profile is cleaned up automatically the next time you sign in.',
+      'Tightened security rules for friendships and shared workout data, so only you and your accepted friends can see your training.',
+    ],
+  },
+  {
+    version: 5,
+    date: '2026-09-22',
+    changes: [
+      'Week sets: save a whole Mon–Sun plan as a reusable set. The /sets page now has two sections — Day sets and Week sets — and the week builder lays out all seven days, so you can leave rest days empty.',
+      'On the Weeks page, "Save week as set" captures everything you logged this week as a new week set, and "Load week set" fills a week from one in a single step. Loading only adds workouts: anything already on a day stays as it is, and you\'ll be told which exercises were skipped.',
+      'Only need one day of a week plan? When applying a set to a day, you can now pick a single day out of any week set, like "PPL Split · Thu".',
+      'New Totals card on the Analytics page shows how much you\'ve done in the selected range: training days, sets, reps and total weight lifted, plus cardio distance, time and sessions. A table ranks your exercises or muscle groups by volume. Pick "All" to see your lifetime totals.',
+      'Notes now carry over: a note you write on an exercise is filled in automatically the next time you log it, dated to when you first wrote it. Edit the note to update it from then on, or switch it off to clear it. Past workouts always keep the note they were logged with. Saved sets carry their notes over too.',
+    ],
+  },
+  {
+    version: 4,
+    date: '2026-08-30',
+    changes: [
+      'Body weight as a workout weight: mark an exercise as "Body weight" and its sets fill in automatically from your latest weigh-in when you log it — reps (and time, if you track it) stay editable. No weigh-in yet? Log one right there without losing what you already typed.',
+      'Workout notes: add a free-text note to any workout when you log it, cardio included. Notes show under the workout on the Weeks page — and on a friend\'s week if you\'re connected, so keep that in mind before you write one.',
+      'Fixed a bug that kept a friend\'s body weight from loading on their profile card.',
+      'Workout Sets: a new /sets page for saving a whole session — exercises, sets, reps, weights and notes — as a named, reusable set. On the Weeks page, + now asks whether to add a single workout or apply a saved set to that day, and you can save any day you\'ve already logged as a new set.',
+      'The set-builder window is easier to use on a larger screen: exercises now lay out in columns instead of one long list, and the window scrolls properly so nothing gets stuck off-screen. Phones and small screens are unchanged.',
+    ],
+  },
+  {
     version: 3,
     date: '2026-08-05',
     changes: [

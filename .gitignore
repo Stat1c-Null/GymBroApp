@@ -43,7 +43,6 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 
-
 # ===== Секреты =====
 .env
 *.env
@@ -52,8 +51,11 @@ Thumbs.db
 body.json
 firebase-service-account.json
 
-# ===== Java (на всякий случай, если в корне появятся) =====
+# ===== Java =====
 target/
 *.class
 *.jar
 *.war
+
+# ===== Nudox / Backend state =====
+.backend/

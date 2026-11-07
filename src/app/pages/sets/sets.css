@@ -1,0 +1,112 @@
+/* Sets-page chrome only. The builder is its own component
+   (components/set-form-modal); shared list/card/modal styles live in
+   styles.css. */
+
+.set-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.set-card {
+  padding: 1.1rem 1.25rem;
+}
+
+.set-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.set-description {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* What's in the set. Deliberately always visible rather than behind an
+   accordion like the Workouts page's groups: the whole point of a set is what
+   it contains, and there are only ever a handful. */
+.set-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border-subtle);
+  list-style: none;
+}
+
+.set-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.set-item-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.set-item-summary {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* The two section headings under the page title. The page header above them
+   carries no button, so these need their own top margin to separate the
+   sections rather than the usual list-header spacing. */
+.section-header {
+  margin-top: 2rem;
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* A week-set card lists its days rather than a flat exercise list — the day is
+   the thing that distinguishes it from a day set. */
+.week-set-day {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+
+.week-set-day-label {
+  flex-shrink: 0;
+  min-width: 2.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.week-set-day-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  list-style: none;
+}
+
+@media (max-width: 768px) {
+  .list-header {
+    flex-direction: column;
+  }
+
+  /* Stack name above the count + actions rather than squeezing them side by
+     side on a narrow screen. */
+  .set-card-head {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .set-item {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+}

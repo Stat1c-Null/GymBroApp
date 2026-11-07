@@ -37,9 +37,28 @@ instead of showing an error, since the user didn't do anything wrong.
 
 **Files**: `pages/dashboard/`.
 
-The landing page after `/`. A single welcome card with quick links to This
-Week, Workouts, Weight, and Changelog. No data of its own — purely
-navigation plus `AuthService.displayName()` for the greeting.
+The landing page after `/`. A **read-only summary** of other pages — nothing
+can be logged or edited from here; every card links to where the real thing
+lives. Top to bottom:
+
+1. **Greeting bar** — a slim `.glass-card` with `AuthService.displayName()` and
+   pill-style quick links to This Week, Workouts, Weight, and Changelog.
+2. **Progress** — one `RangeSelectorComponent` (default `30d`) above the
+   Analytics page's own `WeightBurndownComponent` and `TrainingTotalsComponent`,
+   side by side from 900px, both with `[compact]="true"` (shorter chart / fewer
+   tiles / no breakdown table, and a "Details →" link to `/analytics` in place
+   of the goal editor). One range for both, for the same reason as on
+   [Analytics](#analytics). Because Totals is here, the Dashboard also triggers
+   `EntryBackfillService.ensureBackfilled()` — otherwise a user who never opened
+   Analytics would see totals missing their pre-analytics entries.
+3. **Today** — `TodayWorkoutsComponent` (`pages/dashboard/today-workouts/`):
+   today's entries as roomy cards (name, muscle group, `entrySummary`, note +
+   carried-note date). It queries **the week containing today** through
+   `WeekService.entriesFor`, *not* `WeekService.entries`, which follows whatever
+   week the Weeks page last navigated to. Keyed off `WeekService.today`, so it
+   rolls over at midnight. Its "Open week →" link calls `goToThisWeek()` first.
+4. **What's new** — `ChangelogEntryComponent` for `CHANGELOG[0]` only, with an
+   "All updates →" link to `/changelog`.
 
 ## Weeks (weekly workout logging)
 
@@ -50,7 +69,17 @@ The core logging flow. A 7-day grid (Mon–Sun, `DAY_LABELS`) for the
 currently-viewed week, with Prev/Next/"This week" navigation
 (`WeekService.previousWeek/nextWeek/goToThisWeek`, backed by
 `currentWeekStart`). Each day column lists that day's `WeekEntry` items and
-has an "add" button opening a modal to log a new one.
+has an "add" button.
+
+That button no longer opens the logging form directly: a day can be filled two
+ways now, so it asks which first — **log one workout**, or **drop in a saved
+set**. See [Workout Sets](#workout-sets-reusable-days-and-weeks). A day
+that already has something logged also carries a small "save as set" button in
+its column header, which captures it as a reusable set.
+
+The page header carries the same pair one level up — **"Save week as set"** and
+**"Load week set"** — beside the week nav. They live in `weeks.html` rather than
+in `WeekNavComponent`, which the read-only friend-week view shares.
 
 The grid and the nav are **shared components**, not page markup: the Friends
 page renders a friend's week from the same two, read-only and compact. So the
@@ -76,6 +105,65 @@ by a toggle (`modalTrackTime`) that defaults from
 convert between the `"m:ss"` text the form uses and the stored integer
 seconds.
 
+Those per-set rows and the cardio fields are **shared components** —
+`SetRowsEditorComponent` and `CardioFieldsComponent` — because the set builder
+needs the identical form. Their arithmetic is pure and lives outside both:
+`services/set-rows.ts` (seeding rows, growing the pool, and the
+canonical-weight round-trip guard) and the `toCardioLog`/`fromCardioLog` pair
+beside the cardio component. `weeks.ts` kept the orchestration — which day,
+the duplicate guard, the submit, the usual-weight write-back — and delegates
+the rest. See
+[Workout Sets → Sharing the form](#sharing-the-form-with-the-weeks-page).
+
+Workout notes: a second toggle (`modalHasNotes`) reveals a `<textarea>` for a
+free-text note on the session, stored as `WeekEntry.notes`. It looks like the
+time-tracking toggle but differs from it in three ways worth remembering:
+
+- **No global default.** There is no `showNotes` setting — the toggle starts off
+  on a new entry *unless the exercise has a standing note*, in which case picking
+  it turns the toggle on and fills the text (see below). On edit it re-derives
+  from the entry (`!!entry.notes`).
+- **It applies to cardio too**, so `notes` is built into the shared `base`
+  object in `onSubmit`, not the strength-only branch that carries `trackTime`.
+- **Turning it off saves `''`, not nothing** — see
+  [Database → Workout notes](./database.md#workout-notes) for why omitting the
+  key could never clear a note.
+
+The note renders under the sets summary in `WeekGridComponent`
+(`.day-entry-notes`), clamped to three lines — two in the `compact` friend
+strip — with the full text on the element's `title` and always in the edit
+modal. Because the grid is shared, **an accepted friend sees your notes**.
+
+#### Notes carry over
+
+A note follows the **exercise**, not the day. Write "shoulder still clicking" on
+Bench Press one Tuesday and it is already in the form the next time Bench Press
+is logged, however many weeks later — seeded in `onWorkoutChange`, the same hook
+that re-seeds the set weights, so picking an exercise brings forward both what
+you usually lift and what you last said about it.
+
+Four rules make that safe, and each is enforced in one place:
+
+- **Editing the text revises the note going forward**; the session you just
+  saved keeps exactly what you typed. `WeeksComponent.syncWorkoutNote` pushes it
+  back to the library after the log is saved — the same position and shape as
+  `syncUsualWeight`, including never failing the log if the library write does.
+- **The original date is kept** through every revision and every carry-over, and
+  a brand-new note is dated to the *session* it describes rather than to today,
+  so annotating a past week dates the note to that week. The modal shows it
+  ("First noted Mar 4 · carries over to your next session"), and a note that was
+  carried in gets a small `.day-entry-note-origin` line in the grid — one written
+  on the day it sits on doesn't, since that would only restate the column.
+- **Turning the toggle off clears it**, which is how carry-over is switched off;
+  there is no separate control. Editing an *old* session clears it too, so the
+  toast says so ("Note cleared from Bench Press.").
+- **Past sessions never change.** Each holds its own snapshot in `WeekEntry.notes`
+  and nothing rewrites it, so a deleted note stays on every workout it was
+  applied to. See [Database → Note carry-over](./database.md#note-carry-over).
+
+Applying a saved set carries notes too, with the set's own note winning over the
+standing one — [Workout Sets](#workout-sets-reusable-days-and-weeks).
+
 Duplicate-guard: logging the same workout twice on the same day (outside of
 editing that same entry) is rejected client-side before the write.
 
@@ -98,6 +186,19 @@ cardio or strength summary depending on `muscleGroup`. See
 [Database → The Cardio category](./database.md#the-cardio-category) for the
 data shape and unit handling. The usual-weight write-back above is a no-op
 for cardio entries (they carry no `sets` to check).
+
+Body-weight exercises: when the selected workout is flagged `bodyWeight`
+(`WeeksComponent.isBodyWeight`), every set's weight is filled from the user's
+latest weigh-in and shown read-only — reps and the optional time stay editable,
+and a hint line names the weight being used. The weigh-in log streams in
+asynchronously, so an effect re-seeds the open modal's rows if the log lands
+after a body-weight workout was picked (skipped while *editing* an entry, whose
+weight is history). With an **empty** log there's nothing to fill from, so
+`BodyWeightPromptComponent` takes the hint's place and logs a weigh-in inline —
+the same stream then fills the rows. Sending the user to `/weights` instead
+would have cost them the sets they'd already entered. The usual-weight
+write-back above is skipped for these, the same way it is for cardio. See
+[Database → Body-weight exercises](./database.md#body-weight-exercises).
 
 ## Workouts (exercise library)
 
@@ -129,15 +230,210 @@ the usual/max weight inputs entirely; see
 [Database → The Cardio category](./database.md#the-cardio-category).
 Logging one is a Weeks-page feature — see below.
 
+A **"Body weight"** toggle sits where the usual/max weight inputs are (hidden
+for Cardio, which has no weights at all). Turning it on replaces those two
+inputs — there is no per-workout weight to enter, because the weight comes from
+the weigh-in log at logging time. The library card shows "body weight" instead
+of the usual/max stats. If the weight log is empty,
+`BodyWeightPromptComponent` appears under the toggle so the first weigh-in can
+be logged without leaving the form — the exercise is useless until one exists.
+See
+[Database → Body-weight exercises](./database.md#body-weight-exercises) for the
+stored shape, and Weeks above for what logging one does.
+
+## Workout Sets (reusable days and weeks)
+
+**Files**: `services/workout-set.service.ts`, `services/week-set.service.ts`,
+`services/apply-set.ts` (+ `.spec.ts`), `services/set-rows.ts` (+ `.spec.ts`),
+`pages/sets/`, `components/set-form-modal/` (`set-form-modal.ts`,
+`set-item-editor.ts`, `builder-item.ts` + `.spec.ts`),
+`components/set-rows-editor/`, `components/cardio-fields/`.
+
+For anyone who does the same session every week and would rather not re-enter
+it. There are two kinds, and they nest:
+
+- A **day set** (`WorkoutSet`) is a named, ordered group of exercises with the
+  reps, weights and notes they're meant to be done at; applying one to a day
+  creates a normal `WeekEntry` per exercise, each editable afterwards like any
+  other.
+- A **week set** (`WeekSet`) is a whole Mon–Sun plan — a list of
+  `{ day, items }`, where `items` is the *same* `SetItem[]` a day set holds.
+  Loading one fills every day it covers in a single batch.
+
+The week kind is built almost entirely out of the day kind's machinery:
+`SetItem` is reused verbatim, `sanitizeItem` is shared (and had to be — see
+[Database → weekSets](./database.md#usersuidweeksetssetid)), the apply rules are
+one function called once per day, and the builder is the same component in a
+different mode.
+
+🟠 **"Set" is overloaded, and the code disambiguates.** The gym sense — reps at
+a weight — is `LoggedSet`; it was renamed from `WorkoutSet` when this feature
+landed so that name could mean the bundle. See
+[Database → workoutSets](./database.md#usersuidworkoutsetssetid).
+
+### The `/sets` page
+
+Two stacked sections under one page title — **Day sets**, then **Week sets** —
+each with its own "New …" button, its own loading-vs-empty state, and its own
+empty-state copy. Stacked rather than tabbed: nothing is hidden behind a click,
+and a user typically has a handful of each.
+
+A day-set card is a thin list modelled on the Workouts page: name, description,
+exercise count, and every exercise summarised — using `entrySummary()`, the
+*same* pure function the week grid uses, so a set reads exactly like the day it
+will become. (That function's parameter was widened to a structural
+`SummarizableExercise` for this; `WeekEntry` and `SetItem` both satisfy it.)
+Contents are always visible rather than behind an accordion — the whole point of
+a set is what's in it, and there are only ever a handful.
+
+A week-set card is the same card with one more level: `N days · M exercises` in
+the stats, then one row per stored day (`Mon`, `Wed`, …) listing that day's
+exercises through the very same `entrySummary()`. Rest days aren't stored, so the
+days shown are exactly the ones a load will fill.
+
+Create/edit for both is entirely owned by **`SetFormModalComponent`**, driven by
+inputs (`mode`, `editingSet`/`editingWeekSet`, `presetItems`/`presetDays`,
+`presetName`) and emitting `saved`/`savedWeek`/`close` — the
+same shape `WorkoutFormModalComponent` has, and for the same reason: the Weeks
+page opens it too.
+
+### The builder
+
+Name, optional description, then one `SetItemEditorComponent` block per
+exercise, each with "+ Add exercise" / remove. A block is the Weeks logging
+form minus the day: muscle group → workout → set count → per-set rows (or the
+cardio fields) → optional note. It even carries the same "+ Create new
+workout" link, layering `WorkoutFormModalComponent` over the builder exactly
+as it layers over the logging modal.
+
+**`mode: 'week'` is the same component, not a twin.** It renders seven
+collapsible day sections and writes to `WeekSetService`; everything else — the
+name, the description, the error line, the validation loop, the remove, the
+create-workout sub-modal — is shared. The blocks stay **one flat list**, each
+`BuilderItem` stamped with a `day`; the sections are a view over that list
+(`itemsForDay`), which is what keeps the rest identical. `day` is builder-only
+state and never reaches `SetItem` — a stored item doesn't carry its own day,
+`WeekSetDay` groups items *by* day.
+
+Two deliberate differences in week mode: days with exercises start expanded and
+empty ones collapsed (so seven headers fit on one screen), and a fresh week
+builder starts with **no** blocks rather than the day builder's one — an empty
+Tuesday is normal, and there'd be no obvious day to put a first block on.
+
+Validation and conversion happen together in `toSetItem` (`builder-item.ts`,
+pure and unit-tested), which returns either the storable `SetItem` or the first
+thing wrong with it — named, so the user knows which block to fix ("Enter the
+reps for every set of Bench Press.").
+
+`BuilderItem`'s fields are **signals**, unlike the Weeks modal's plain
+`SetRow`s. The builder and each child editor share one object by reference, and
+a plain property mutation would tell neither of them anything. Row *fields*
+stay plain for the same reason they always were: `[(ngModel)]` writes what the
+user already sees.
+
+### Sharing the form with the Weeks page
+
+This is the second piece of business logic genuinely shared between two pages
+(after `WorkoutFormModalComponent`). The split:
+
+| Piece | Kind | Why there |
+|---|---|---|
+| `services/set-rows.ts` | pure functions | The arithmetic, including the **canonical-weight round-trip guard** — the 135 lbs → 61.2 kg → 134.9 lbs trap. Worth testing directly, and the thing you'd otherwise get subtly wrong twice. |
+| `SetRowsEditorComponent` | presentational | The set-count field, the time toggle, and the rows. Renders `SetRow` objects the caller owns and lets `ngModel` mutate them in place. |
+| `CardioFieldsComponent` | presentational | Duration/distance/HR/elevation + the read-only computed pace, with `toCardioLog`/`fromCardioLog` converting at the boundary. |
+
+One input separates the two callers: `template`. In template mode a body-weight
+exercise shows **no weight at all** and no "log a weigh-in" prompt — a set is
+reused week after week, so the weight is filled at apply time instead. Both
+components also take an `idPrefix`, because the builder renders several inside
+one `<form>` where duplicate control names would collide.
+
+### Applying a set to a day
+
+The `+` on a day column opens a chooser ("Log a workout" / "Add a set"); the
+second opens a picker listing saved sets with their exercises. Choosing one
+writes every exercise in a single batch (`WeekService.addMany`).
+
+Below the day sets, that same picker offers **one day pulled out of a week set**
+— one row per non-empty day, labelled `PPL Split · Thu`. A week set is often the
+only place a routine was written down, and wanting just Thursday out of it
+shouldn't mean rebuilding it as a day set. It calls `entriesFromItems`, the
+function `entriesFromSet` itself delegates to.
+
+The rules live in `services/apply-set.ts` — pure, no Angular, no Firestore, in
+the spirit of `entry-summary.ts`. Three of them, each with an
+obvious-but-wrong alternative, are spelled out in
+[Database → Applying a set to a day](./database.md#applying-a-set-to-a-day):
+a collision **skips** that exercise rather than failing the set, body-weight
+exercises take **today's** weight, and **nothing** is written back to the
+exercise library. The toast reports the outcome, naming what was skipped.
+
+`WeeksComponent.commitApplied` is the shared tail of all three apply flows — the
+write, the skipped list, the `applying` guard. The three *messages* stay with the
+callers: "already logged on Mon" and "already logged this week" are different
+facts, and one wording covering both would be vaguer than either.
+
+### Loading a week set into a week
+
+"Load week set" in the page header opens a picker of week sets, each row naming
+the days it fills. Choosing one calls `entriesFromWeekSet` and writes the whole
+week with the **unchanged** `WeekService.addMany` — one batch, one commit, so a
+week can never land half-applied.
+
+It is **purely additive**: a day that already has an exercise keeps it and that
+one exercise is skipped, by name and day. Nothing is cleared, and there is
+deliberately no "replace this week". See
+[Database → Applying a week to a week](./database.md#applying-a-week-to-a-week)
+for why the collision guard is rebuilt per day.
+
+### Save this day (or week) as a set
+
+The inverse, and in practice how most sets get built: the quickest moment to
+write a routine down is just after doing it. A "save as set" button on any
+non-empty day column captures its entries (`setItemsFromEntries`) and opens the
+builder **pre-filled** rather than saving silently — a set wants a name, and
+this is the moment to look over what's being kept. The round trip is stable:
+capture preserves the column's order, and `addMany` restores it.
+
+"Save week as set" in the page header is the same move one level up:
+`weekSetDaysFromEntries` captures every non-empty day of the viewed week and
+opens the builder in week mode, pre-filled and named after the week's date range.
+It is disabled while the week is empty — there is nothing to capture.
+
+### Interaction with the rest of the app
+
+- **No security-rules change.** Both collections sit under `users/{uid}`, which
+  the existing owner rule already covers. Nothing is shared across a
+  friendship.
+- **Analytics needs nothing.** Applied entries are ordinary `WeekEntry` docs
+  with `uid`/`date` stamped by `WeekService.addMany`, so the collection-group
+  query sees them like any other.
+- **`loggableGroups()`/`workoutsInGroup()`** moved into `workout.service.ts`
+  when the builder needed the Weeks modal's group list, rather than becoming a
+  third copy.
+- The Weeks page gained the chooser, the pickers and both capture flows;
+  `WeekGridComponent` gained one output (`saveAsSet`) and stays presentational,
+  so the friend-week view is unaffected. The two week-level buttons live in
+  `weeks.html`'s own `.list-header`, **not** in `WeekNavComponent` — that
+  component is shared read-only with the friend-week view.
+
 ## Weights (body weight tracking)
 
-**Files**: `services/weight.service.ts`, `pages/weights/`.
+**Files**: `services/weight.service.ts`, `pages/weights/`,
+`components/body-weight-prompt/`.
 
 A simple timestamped log of body weight. The add form accepts *either*
 kilograms or pounds; whichever is filled is treated as canonical and the
 other is derived via `convertWeight()` (kg wins if somehow both are filled —
 the form only surfaces one input at a time in practice). Both units are
 persisted so the list can display both without a live conversion on read.
+
+This page is no longer the only way in. `BodyWeightPromptComponent` writes to
+the same collection from the Workouts and Weeks modals, for the case where a
+body-weight exercise has no weigh-in to draw on — see
+[Workouts](#workouts-exercise-library). It asks for one number in the user's
+display unit rather than the kg/lbs pair above (it's a detour out of another
+form, not the weight log itself) and derives the other unit the same way.
 
 ## Settings
 
@@ -165,14 +461,16 @@ Three independent things live on this page:
 ## Analytics
 
 **Files**: `pages/analytics/` (`analytics.ts`/`.html`/`.css`, `goal-form-modal.ts`,
-`weight-burndown/`, `muscle-progress/`), `analytics/` (pure maths — `burndown.ts`,
-`exercise-metrics.ts`), `components/charts/` (reusable chart toolkit),
-`services/weight-analytics.service.ts`, `services/exercise-analytics.service.ts`,
-`services/entry-backfill.service.ts`.
+`weight-burndown/`, `muscle-progress/`, `totals/`), `analytics/` (pure maths —
+`burndown.ts`, `exercise-metrics.ts`, `totals.ts`), `components/charts/`
+(reusable chart toolkit), `services/weight-analytics.service.ts`,
+`services/exercise-analytics.service.ts`, `services/entry-backfill.service.ts`.
 
-One range selector (30d/90d/6m/1y/All) scoping a stack of cards. The range lives on
-the page, never per-card — two cards showing different windows is how a dashboard
-starts lying.
+One range selector (30d/90d/6m/1y/All) scoping a stack of three cards. The range
+lives on the page, never per-card — two cards showing different windows is how a
+dashboard starts lying. (A card may still have its *own* view toggles — the
+metric switch, the totals breakdown switch — because those change what is shown,
+not which window it is drawn from.)
 
 ### Weight burndown
 
@@ -228,14 +526,67 @@ Cardio workouts are excluded here entirely (their reps/weight-based metrics
 above don't apply) rather than folded into the `Unassigned` chip —
 `ExerciseAnalyticsService.exercisesInGroup` and `MuscleProgressComponent`'s
 group list both use `isOrphanGroup()` (`workout.service.ts`), which
-special-cases `CARDIO_GROUP` for exactly this reason. A dedicated cardio
-analytics view would be separate, future work.
+special-cases `CARDIO_GROUP` for exactly this reason. Cardio *totals* now live on
+the Totals card below; a cardio **trend** view — pace over time, weekly mileage —
+is still separate, future work.
+
+### Totals
+
+**Files**: `analytics/totals.ts` (+ `.spec.ts`), `pages/analytics/totals/`.
+
+The other two cards answer "how am I *trending*?"; this one answers "how much
+have I *done*?" — over the page's window, so "All" gives lifetime figures.
+
+Two tile rows and a table. **Lifting**: training days, sets, reps, and total
+weight lifted (Σ reps×weight). **Cardio**: distance, time, sessions — kept in
+their own row rather than folded in, because a 5-mile run has nothing to say
+about tonnage. Then a **breakdown table** ranked by volume, toggled between
+per-exercise and per-muscle-group; cardio is excluded from both, for the same
+reason it's excluded from the card above.
+
+All the arithmetic is pure in `analytics/totals.ts` (`computeTotals`), which
+reuses `totalVolume`/`totalReps`/`setCount` from `exercise-metrics.ts` rather
+than re-summing `reps×weight` — those already encode which rows count as a
+logged set. Three rules worth knowing:
+
+- **`volumeLbs` is `null`, not `0`, when nothing qualified**, and renders `—`.
+  The per-session metrics already return `null` for "not applicable", and that
+  has to survive aggregation: a month of bodyweight-only training genuinely has
+  no tonnage, and `0 lbs` would read as a measurement rather than an absence.
+  Counts are plain numbers, where zero *is* truthful.
+- **The caller decides what is cardio.** `computeTotals` takes entries with
+  `cardio` already resolved, because `CARDIO_GROUP` is a value export from
+  `workout.service.ts` — importing it would drag Firestore into a pure module.
+  `ExerciseAnalyticsService.totalsEntries()` applies the same
+  `muscleGroup === CARDIO_GROUP && entry.cardio` predicate `entrySummary` uses.
+- **Convert the sum, never the addends.** `convertWeight` rounds to one decimal
+  (see [Database → Round-trip drift](./database.md#round-trip-drift--the-trap-to-know-about)),
+  which is negligible once but compounds across thousands of entries. The card
+  sums canonical lbs/miles and calls `displayLifted`/`displayDistance` once. It
+  also formats with `toLocaleString()` rather than the `lifted` pipe, which emits
+  ungrouped digits — fine at `135 lbs`, unreadable at `1,234,567 lbs`.
+
+Body-weight exercises need no special case: a logged body-weight set already
+stores a real weight (the weigh-in at logging time), so it counts toward tonnage
+exactly as the exercise-progress volume metric already treats it.
+
+`formatDuration` (`services/cardio.ts`) renders total cardio time as `"12h 30m"`.
+It exists because `formatTime` only emits `m:ss`, which turns forty hours of
+running into `"2400:00"`.
+
+**No new Firestore reads.** `ExerciseAnalyticsService.entries` already streams
+every entry the user has logged and never filters by date — the range has always
+been applied client-side — so this card costs one more pass over data already in
+memory, and needed no rules or index change.
 
 ### Adding another analytic
 
 Write a reducer in `analytics/` and a card that composes `AnalyticsCardComponent` +
-`LineChartComponent` (or `BarChartComponent`) + `StatTileComponent`. The chart layer should need no change —
-that's the test of the design.
+`StatTileComponent`, plus `LineChartComponent` or `BarChartComponent` if the
+analytic actually wants a chart — Totals doesn't, and didn't have to pretend
+otherwise. The chart layer should need no change — that's the test of the design.
+Totals is the worked example: a pure `totals.ts` + `totals.spec.ts`, one accessor
+on the existing service, a card, and one line on the page.
 
 > **Reading workout history across weeks** (the burndown reads flat `weights`; a
 > *workout* analytic can't). `WeekService` subscribes to one `weekId` at a time, and
@@ -246,6 +597,41 @@ that's the test of the design.
 > query filtered by `uid`, and `EntryBackfillService` stamps old entries once. It
 > needs a Firebase-console collection-group index + security rule — see
 > [Database → Cross-week analytics reads](./database.md#cross-week-analytics-reads-the-exception).
+
+## Records (personal bests)
+
+**Files**: `pages/records/` (`records.ts`, `.html`, `.css`), `analytics/records.ts`
+(+ `records.spec.ts`).
+
+Every exercise's personal bests, at `/records` (nav: after Analytics). Strength
+exercises hold up to four: **Est. 1RM** (Epley, same formula as the exercise card),
+**heaviest set**, **most reps** in one set, and **best session volume**. Cardio holds
+**longest distance**, **longest session** and **fastest pace**. A per-set record
+keeps the set behind it ("5 × 225 lbs"), and a record set in the last 7 days gets
+a "New" badge.
+
+**Derived, never stored.** `computeRecords` runs over
+`ExerciseAnalyticsService.totalsEntries()` — the same rows the Totals card uses —
+so there is no `records` collection and no write path. Editing or deleting an old
+session can't leave a stale record behind, and a renamed exercise or muscle group
+carries its records with it (label/group come from the current library). The page
+triggers `EntryBackfillService.ensureBackfilled()` like Analytics and the
+Dashboard, since pre-backfill entries may hold old bests.
+
+Rules worth knowing:
+
+- **Ties keep the earlier date** — a record is set when first reached.
+- **Same-day entries of one exercise are pooled** before session volume, matching
+  the exercise-progress card.
+- An exercise logged only with blank sets is still listed (with no records), so a
+  search for it finds it.
+
+**Search is one box, no field picker.** `searchRecords` splits the query into words;
+each word must match the exercise name *or* the muscle group (independently), so
+"chest incline" finds Incline Press in Chest. Case- and accent-insensitive.
+Ranking: name matches weigh double over group matches, and a word-start match
+outranks a mid-word one. Each hit reports which field matched; the page outlines
+the group chip when the group matched, and tapping a chip searches that group.
 
 ## Friends
 

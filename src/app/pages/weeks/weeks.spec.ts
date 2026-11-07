@@ -1,5 +1,5 @@
-import { TestBed } from '@angular/core/testing';
-import type { WritableSignal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal, type WritableSignal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WeeksComponent } from './weeks';
 import {
@@ -11,7 +11,18 @@ import {
   formatTime,
   uniformWeight,
 } from '../../services/week.service';
-import { WorkoutService, CARDIO_GROUP } from '../../services/workout.service';
+import { WorkoutService, Workout, CARDIO_GROUP } from '../../services/workout.service';
+import {
+  SetItem,
+  WorkoutSet,
+  WorkoutSetService,
+} from '../../services/workout-set.service';
+import {
+  WeekSet,
+  WeekSetDay,
+  WeekSetService,
+} from '../../services/week-set.service';
+import { WeightService, WeightEntry } from '../../services/weight.service';
 import { distanceToCanonical, elevationToCanonical } from '../../services/cardio';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
@@ -27,24 +38,40 @@ interface WeeksView {
   onDelete: (entry: WeekEntry) => Promise<void>;
   toggleModalTrackTime: () => void;
   modalTrackTime: () => boolean;
-  onWorkoutCreated: (workout: {
-    id?: string;
-    muscleGroup: string;
-    usualWeight: number | null;
-  }) => void;
+  toggleModalNotes: () => void;
+  modalHasNotes: () => boolean;
+  modalNotes: WritableSignal<string>;
+  modalNoteCreatedAt: WritableSignal<string>;
+  noteOriginLabel: () => string;
+  onWorkoutCreated: (workout: Workout) => void;
   setRows: () => { reps: number | null; weight: number | null; timeText: string }[];
   error: () => string;
   editingId: () => string | null;
+  showModal: () => boolean;
   muscleGroups: () => string[];
   modalMuscleGroup: () => string;
   modalWorkoutId: () => string;
   filteredWorkouts: () => { id?: string }[];
   isCardio: () => boolean;
+  isBodyWeight: () => boolean;
+  bodyWeightDisplay: () => number | null;
   cardioTimeText: WritableSignal<string>;
   cardioDistance: WritableSignal<number | null>;
   cardioHeartRate: WritableSignal<number | null>;
   cardioElevation: WritableSignal<number | null>;
-  cardioPace: () => string | null;
+  // --- the day's "+": one workout, or a whole saved set ---
+  openAddChoice: (day: number) => void;
+  choose: (choice: 'workout' | 'set') => void;
+  showAddChoice: () => boolean;
+  showSetPicker: () => boolean;
+  activeDayLabel: () => string;
+  applySet: (set: WorkoutSet) => Promise<void>;
+  itemNames: (set: WorkoutSet) => string;
+  // --- "save this day as a set" ---
+  onSaveDayAsSet: (day: number) => void;
+  showSaveDay: () => boolean;
+  saveDayItems: () => SetItem[];
+  saveDayName: () => string;
 }
 
 const SAMPLE_WORKOUT = {
@@ -65,19 +92,31 @@ const ORPHAN_WORKOUT = {
   maxWeight: 50,
 };
 
-const CARDIO_WORKOUT: {
-  id: string;
-  name: string;
-  muscleGroup: string;
-  usualWeight: number | null;
-  maxWeight: number | null;
-} = {
+const CARDIO_WORKOUT: Workout = {
   id: 'w3',
   name: 'Morning Run',
   muscleGroup: CARDIO_GROUP,
   usualWeight: null,
   maxWeight: null,
 };
+
+/** A body-weight exercise: no usual/max weight of its own — every set is
+ *  filled in from the user's latest weigh-in. */
+const BODYWEIGHT_WORKOUT: Workout = {
+  id: 'w4',
+  name: 'Pull-ups',
+  muscleGroup: 'Back',
+  usualWeight: null,
+  maxWeight: null,
+  bodyWeight: true,
+};
+
+/** Weigh-ins are read newest-first, so index 0 is the current body weight.
+ *  Both units are stored on every entry — see `WeightEntry`. */
+const WEIGH_INS: WeightEntry[] = [
+  { id: 'wt2', kg: 80, lbs: 176.4 },
+  { id: 'wt1', kg: 81, lbs: 178.6 },
+];
 
 describe('week.service date helpers', () => {
   it('mondayOf returns the Monday of that week', () => {
@@ -99,6 +138,20 @@ describe('week.service date helpers', () => {
     expect(parseTime('')).toBeNull();
     expect(parseTime('  ')).toBeNull();
     expect(parseTime('abc')).toBeNull();
+  });
+
+  it('parseTime reads h:mm:ss instead of dropping the hours', () => {
+    // Used to read as 1:15 → 75 seconds.
+    expect(parseTime('1:15:00')).toBe(4500);
+    expect(parseTime('0:05:30')).toBe(330);
+  });
+
+  it('parseTime rejects out-of-range fields and non-time text', () => {
+    expect(parseTime('1:75')).toBeNull();
+    expect(parseTime('1:60:00')).toBeNull();
+    expect(parseTime('1:2:3:4')).toBeNull();
+    expect(parseTime('-0:30')).toBeNull();
+    expect(parseTime('1e3')).toBeNull();
   });
 
   it('formatTime renders m:ss with zero-padded seconds', () => {
@@ -131,14 +184,17 @@ describe('uniformWeight', () => {
 });
 
 describe('WeeksComponent', () => {
+  let fixture: ComponentFixture<WeeksComponent>;
   let view: WeeksView;
   let entriesData: WeekEntry[];
   let distanceUnitValue: 'mi' | 'km';
+  let unitValue: 'kg' | 'lbs';
   let service: {
     entries: () => WeekEntry[];
     rangeLabel: () => string;
     isCurrentWeek: () => boolean;
     currentWeekStart: () => Date;
+    weekId: () => string;
     today: () => Date;
     previousWeek: ReturnType<typeof vi.fn>;
     nextWeek: ReturnType<typeof vi.fn>;
@@ -146,21 +202,38 @@ describe('WeeksComponent', () => {
     add: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
+    addMany: ReturnType<typeof vi.fn>;
   };
+  /** The saved sets the "+ → Add a set" picker sees. Most tests don't care;
+   *  the ones that do assign to `savedSets` before rendering. */
+  let savedSets: WorkoutSet[];
+  let setService: { sets: () => WorkoutSet[] | undefined };
+  let savedWeekSets: WeekSet[];
+  let weekSetService: { weekSets: () => WeekSet[] | undefined };
   let toast: { show: ReturnType<typeof vi.fn> };
+  /** The exercise library the page sees. A `let` rather than a constant so a
+   *  test can give an exercise a standing note before rendering. */
+  let workoutsData: Workout[];
   let workoutService: {
-    workouts: () => (typeof SAMPLE_WORKOUT | typeof CARDIO_WORKOUT)[];
+    workouts: () => Workout[];
     update: ReturnType<typeof vi.fn>;
+    setNote: ReturnType<typeof vi.fn>;
   };
+  let weighIns: WritableSignal<WeightEntry[] | undefined>;
+  let weightService: { weights: () => WeightEntry[] | undefined };
 
   beforeEach(async () => {
     entriesData = [];
+    savedSets = [];
+    savedWeekSets = [];
     distanceUnitValue = 'mi';
+    unitValue = 'lbs';
     service = {
       entries: () => entriesData,
       rangeLabel: () => 'Jun 16 – Jun 22, 2026',
       isCurrentWeek: () => true,
       currentWeekStart: () => new Date(2026, 5, 15),
+      weekId: () => '2026-06-15',
       today: () => new Date(2026, 5, 17),
       previousWeek: vi.fn(),
       nextWeek: vi.fn(),
@@ -168,24 +241,41 @@ describe('WeeksComponent', () => {
       add: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
+      addMany: vi.fn().mockResolvedValue(undefined),
     };
+    setService = { sets: () => savedSets };
+    weekSetService = { weekSets: () => savedWeekSets };
     toast = { show: vi.fn() };
+    workoutsData = [
+      SAMPLE_WORKOUT,
+      ORPHAN_WORKOUT,
+      CARDIO_WORKOUT,
+      BODYWEIGHT_WORKOUT,
+    ];
     workoutService = {
-      workouts: () => [SAMPLE_WORKOUT, ORPHAN_WORKOUT, CARDIO_WORKOUT],
+      workouts: () => workoutsData,
       update: vi.fn().mockResolvedValue(undefined),
+      setNote: vi.fn().mockResolvedValue(undefined),
     };
+    // A signal so a test can land the log *after* the modal is already open,
+    // the way the live Firestore stream does.
+    weighIns = signal<WeightEntry[] | undefined>(WEIGH_INS);
+    weightService = { weights: () => weighIns() };
 
     await TestBed.configureTestingModule({
       imports: [WeeksComponent],
       providers: [
         { provide: WeekService, useValue: service },
         { provide: WorkoutService, useValue: workoutService },
+        { provide: WorkoutSetService, useValue: setService },
+        { provide: WeekSetService, useValue: weekSetService },
+        { provide: WeightService, useValue: weightService },
         { provide: ToastService, useValue: toast },
         {
           provide: SettingsService,
           useValue: {
             showSetTime: () => false,
-            unit: () => 'lbs',
+            unit: () => unitValue,
             muscleGroups: () => ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
             distanceUnit: () => distanceUnitValue,
           },
@@ -193,8 +283,8 @@ describe('WeeksComponent', () => {
       ],
     }).compileComponents();
 
-    view = TestBed.createComponent(WeeksComponent)
-      .componentInstance as unknown as WeeksView;
+    fixture = TestBed.createComponent(WeeksComponent);
+    view = fixture.componentInstance as unknown as WeeksView;
   });
 
   it('builds set rows with weight defaulted from the chosen workout', () => {
@@ -263,6 +353,8 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [
         { reps: 10, weight: 60, time: null },
@@ -361,6 +453,8 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
+      noteCreatedAt: '',
       trackTime: true,
       sets: [{ reps: 8, weight: 60, time: 90 }],
     });
@@ -381,6 +475,8 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [{ reps: 8, weight: 60, time: null }],
     });
@@ -431,6 +527,8 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
+      noteCreatedAt: '',
       trackTime: false,
       sets: [{ reps: 12, weight: 60, time: null }],
     });
@@ -460,6 +558,8 @@ describe('WeeksComponent', () => {
       workoutId: 'w1',
       workoutName: 'Bench Press',
       muscleGroup: 'Chest',
+      notes: '',
+      noteCreatedAt: '',
       trackTime: true,
       sets: [{ reps: 10, weight: 60, time: 90 }],
     });
@@ -470,7 +570,13 @@ describe('WeeksComponent', () => {
     view.onWorkoutChange('w1');
     view.onSetsCountChange(2);
 
-    view.onWorkoutCreated({ id: 'new-w', muscleGroup: 'Back', usualWeight: 50 });
+    view.onWorkoutCreated({
+      id: 'new-w',
+      name: 'Barbell Row',
+      muscleGroup: 'Back',
+      usualWeight: 50,
+      maxWeight: 70,
+    });
 
     // The new workout's group + id are selected, and the in-progress set rows
     // are preserved (not wiped by a group change).
@@ -485,7 +591,13 @@ describe('WeeksComponent', () => {
     view.onWorkoutChange('w1');
     view.onSetsCountChange(2);
 
-    view.onWorkoutCreated({ id: 'new-cardio', muscleGroup: CARDIO_GROUP, usualWeight: null });
+    view.onWorkoutCreated({
+      id: 'new-cardio',
+      name: 'Evening Run',
+      muscleGroup: CARDIO_GROUP,
+      usualWeight: null,
+      maxWeight: null,
+    });
 
     expect(view.modalMuscleGroup()).toBe(CARDIO_GROUP);
     expect(view.modalWorkoutId()).toBe('new-cardio');
@@ -550,15 +662,8 @@ describe('WeeksComponent', () => {
       expect(view.cardioDistance()).toBeNull();
     });
 
-    it('computes pace from the entered duration and distance', () => {
-      view.openAddModal(0);
-      view.onMuscleGroupChange(CARDIO_GROUP);
-      view.onWorkoutChange('w3');
-      view.cardioTimeText.set('30:00');
-      view.cardioDistance.set(5);
-
-      expect(view.cardioPace()).toBe('6:00 /mi');
-    });
+    // Pace moved to CardioFieldsComponent when the set builder needed the same
+    // fields — it's covered in cardio-fields.spec.ts now.
 
     it('saves a cardio session with duration, distance, heart rate and elevation', async () => {
       view.openAddModal(0);
@@ -576,6 +681,8 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: { time: 1800, distance: 5, heartRate: 150, elevation: 200 },
       });
@@ -600,6 +707,8 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: {
           time: 1800,
@@ -665,10 +774,668 @@ describe('WeeksComponent', () => {
         workoutId: 'w3',
         workoutName: 'Morning Run',
         muscleGroup: CARDIO_GROUP,
+        notes: '',
+        noteCreatedAt: '',
         sets: [],
         cardio: { time: 1800, distance: 6, heartRate: null, elevation: null },
       });
     });
+  });
 
+  describe('body-weight exercises', () => {
+    it('fills every set with the latest weigh-in instead of a usual weight', () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(3);
+
+      expect(view.isBodyWeight()).toBe(true);
+      expect(view.bodyWeightDisplay()).toBe(176.4);
+      // Newest weigh-in, not the older one.
+      expect(view.setRows().map((r) => r.weight)).toEqual([176.4, 176.4, 176.4]);
+    });
+
+    it('saves the weigh-in as each set’s weight', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      view.setRows().forEach((r) => (r.reps = 8));
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith({
+        day: 0,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        notes: '',
+        noteCreatedAt: '',
+        trackTime: false,
+        sets: [
+          { reps: 8, weight: 176.4, time: null },
+          { reps: 8, weight: 176.4, time: null },
+        ],
+      });
+    });
+
+    it('never writes the body weight back as the workout’s usual weight', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      view.setRows().forEach((r) => (r.reps = 8));
+
+      await view.onSubmit();
+
+      // Every set agrees on one weight, which would normally sync back — but
+      // that would freeze one day's body weight into the library.
+      expect(workoutService.update).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+    });
+
+    it('shows kg from the weigh-in’s own field but still stores canonical lbs', async () => {
+      unitValue = 'kg';
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      // Read straight off WeightEntry.kg — not lbs re-converted (176.4 lbs →
+      // 80.0 kg here, but rounding makes that coincidence unreliable).
+      expect(view.setRows()[0].weight).toBe(80);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ sets: [{ reps: 8, weight: 176.4, time: null }] })
+      );
+    });
+
+    it('leaves the weight blank when nothing has ever been weighed in', async () => {
+      weighIns.set([]);
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      expect(view.bodyWeightDisplay()).toBeNull();
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ sets: [{ reps: 8, weight: null, time: null }] })
+      );
+    });
+
+    it('fills the rows in when the weigh-in log arrives after the modal is open', () => {
+      weighIns.set(undefined); // still loading
+      view.openAddModal(0);
+      view.onMuscleGroupChange('Back');
+      view.onWorkoutChange('w4');
+      view.onSetsCountChange(2);
+      expect(view.setRows().every((r) => r.weight === null)).toBe(true);
+
+      weighIns.set(WEIGH_INS);
+      fixture.detectChanges(); // runs the re-seed effect
+
+      expect(view.setRows().map((r) => r.weight)).toEqual([176.4, 176.4]);
+    });
+
+    it('keeps the weight an entry was logged at when editing, not today’s', () => {
+      const entry: WeekEntry = {
+        id: 'old-pullups',
+        day: 1,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        sets: [{ reps: 8, weight: 190 }],
+      };
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+
+      expect(view.isBodyWeight()).toBe(true);
+      // 190 lbs then, 176.4 lbs now — history keeps what actually happened.
+      expect(view.setRows()[0].weight).toBe(190);
+    });
+
+    it('does not let a weigh-in arriving mid-edit rewrite the logged weight', () => {
+      const entry: WeekEntry = {
+        id: 'old-pullups',
+        day: 1,
+        workoutId: 'w4',
+        workoutName: 'Pull-ups',
+        muscleGroup: 'Back',
+        sets: [{ reps: 8, weight: 190 }],
+      };
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+      weighIns.set([{ id: 'wt3', kg: 79, lbs: 174.2 }]);
+      fixture.detectChanges(); // the re-seed effect must skip an entry being edited
+
+      expect(view.setRows()[0].weight).toBe(190);
+    });
+  });
+
+  describe('workout notes', () => {
+    const notedEntry = (): WeekEntry => ({
+      id: 'noted',
+      day: 0,
+      workoutId: 'w1',
+      workoutName: 'Bench Press',
+      muscleGroup: 'Chest',
+      notes: 'Felt strong',
+      sets: [{ reps: 10, weight: 60 }],
+    });
+
+    it('saves a trimmed note when the toggle is on', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('  Shoulder tight on the warmup  ');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: 'Shoulder tight on the warmup' })
+      );
+    });
+
+    it('saves no note when the toggle is off, even if text was entered', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.modalNotes.set('typed, then thought better of it');
+      expect(view.modalHasNotes()).toBe(false);
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: '' })
+      );
+    });
+
+    it('turns the toggle on and seeds the text when editing an entry that has a note', () => {
+      view.openEditModal(notedEntry());
+
+      expect(view.modalHasNotes()).toBe(true);
+      expect(view.modalNotes()).toBe('Felt strong');
+    });
+
+    it("writes '' when an existing note is toggled off, so updateDoc clears it", async () => {
+      const entry = notedEntry();
+      entriesData = [entry];
+
+      view.openEditModal(entry);
+      view.toggleModalNotes();
+      expect(view.modalHasNotes()).toBe(false);
+
+      await view.onSubmit();
+
+      expect(service.update).toHaveBeenCalledWith(
+        'noted',
+        expect.objectContaining({ notes: '' })
+      );
+    });
+
+    it('seeds a fresh log from the exercise’s standing note, toggle already on', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+
+      expect(view.modalHasNotes()).toBe(true);
+      expect(view.modalNotes()).toBe('Shoulder clicks');
+      expect(view.modalNoteCreatedAt()).toBe('2026-03-04');
+    });
+
+    it('clears a seeded note when a different exercise is picked', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onWorkoutChange('w2'); // no standing note of its own
+
+      expect(view.modalHasNotes()).toBe(false);
+      expect(view.modalNotes()).toBe('');
+      expect(view.modalNoteCreatedAt()).toBe('');
+    });
+
+    it('keeps the original date when a carried note is logged again weeks later', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(3); // Thursday of the viewed week
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notes: 'Shoulder clicks',
+          noteCreatedAt: '2026-03-04',
+        })
+      );
+    });
+
+    it('dates a brand-new note to the session it describes, not to today', async () => {
+      // The viewed week starts Mon 2026-06-15; today is Wed the 17th. A note
+      // written on Monday's entry must date to Monday.
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ noteCreatedAt: '2026-06-15' })
+      );
+    });
+
+    it('pushes a new note onto the exercise so the next session carries it', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith(
+        'w1',
+        'Tweaked the setup',
+        '2026-06-15'
+      );
+    });
+
+    it('writes nothing to the library when a carried note is logged unchanged', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first-written date when a carried note is revised', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.modalNotes.set('Shoulder clicks, but less');
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith(
+        'w1',
+        'Shoulder clicks, but less',
+        '2026-03-04'
+      );
+    });
+
+    it('clears the standing note when the toggle is switched off', async () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Shoulder clicks', noteCreatedAt: '2026-03-04' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes(); // seeded on, now off
+
+      await view.onSubmit();
+
+      expect(workoutService.setNote).toHaveBeenCalledWith('w1', '', '');
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: '', noteCreatedAt: '' })
+      );
+    });
+
+    it('says so in the toast when a note is saved or cleared', async () => {
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(toast.show).toHaveBeenCalledWith(
+        expect.stringContaining('Note saved to Bench Press for next time.'),
+        'success'
+      );
+    });
+
+    it('keeps the log and its toast when the library note write fails', async () => {
+      workoutService.setNote.mockRejectedValueOnce(new Error('offline'));
+
+      view.openAddModal(0);
+      view.onWorkoutChange('w1');
+      view.onSetsCountChange(1);
+      view.setRows()[0].reps = 8;
+      view.toggleModalNotes();
+      view.modalNotes.set('Tweaked the setup');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith('Workout added!', 'success');
+    });
+
+    it('seeds an edited entry from the entry, not the exercise’s current note', () => {
+      workoutsData = [
+        { ...SAMPLE_WORKOUT, note: 'Revised since', noteCreatedAt: '2026-05-01' },
+        ...workoutsData.slice(1),
+      ];
+
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2026-04-02' });
+
+      expect(view.modalNotes()).toBe('Felt strong');
+      expect(view.modalNoteCreatedAt()).toBe('2026-04-02');
+    });
+
+    it('labels a note with the date it was first written', () => {
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2026-03-04' });
+
+      expect(view.noteOriginLabel()).toBe('Mar 4');
+    });
+
+    it('includes the year on a note carried over from a previous year', () => {
+      view.openEditModal({ ...notedEntry(), noteCreatedAt: '2025-11-20' });
+
+      expect(view.noteOriginLabel()).toBe('Nov 20, 2025');
+    });
+
+    it('saves a note on a cardio session too', async () => {
+      view.openAddModal(0);
+      view.onMuscleGroupChange(CARDIO_GROUP);
+      view.onWorkoutChange('w3');
+      view.cardioTimeText.set('30:00');
+      view.cardioDistance.set(5);
+      view.toggleModalNotes();
+      view.modalNotes.set('Windy out');
+
+      await view.onSubmit();
+
+      expect(service.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          muscleGroup: CARDIO_GROUP,
+          notes: 'Windy out',
+        })
+      );
+    });
+  });
+
+  describe('adding a saved set to a day', () => {
+    /** A saved set holding Bench Press (already in the library) and Dips. */
+    function pushDay(): WorkoutSet {
+      return {
+        id: 's1',
+        name: 'Push Day',
+        description: 'Chest and arms',
+        items: [
+          {
+            workoutId: 'w1',
+            workoutName: 'Bench Press',
+            muscleGroup: 'Chest',
+            notes: '',
+            trackTime: false,
+            sets: [
+              { reps: 10, weight: 135, time: null },
+              { reps: 8, weight: 135, time: null },
+            ],
+          },
+          {
+            workoutId: 'w5',
+            workoutName: 'Dips',
+            muscleGroup: 'Arms',
+            notes: 'slow',
+            trackTime: false,
+            sets: [{ reps: 12, weight: null, time: null }],
+          },
+        ],
+      };
+    }
+
+    it('asks which kind of add the "+" means before opening either form', () => {
+      view.openAddChoice(2);
+
+      expect(view.showAddChoice()).toBe(true);
+      expect(view.showModal()).toBe(false);
+      expect(view.activeDayLabel()).toBe('Wed');
+    });
+
+    it('opens the logging form for "workout"', () => {
+      view.openAddChoice(2);
+      view.choose('workout');
+
+      expect(view.showAddChoice()).toBe(false);
+      expect(view.showModal()).toBe(true);
+      expect(view.editingId()).toBeNull();
+    });
+
+    it('opens the set picker for "set"', () => {
+      view.openAddChoice(2);
+      view.choose('set');
+
+      expect(view.showAddChoice()).toBe(false);
+      expect(view.showSetPicker()).toBe(true);
+      expect(view.showModal()).toBe(false);
+    });
+
+    it('writes every exercise in one batch, on the chosen day', async () => {
+      view.openAddChoice(3);
+      view.choose('set');
+
+      await view.applySet(pushDay());
+
+      expect(service.addMany).toHaveBeenCalledTimes(1);
+      const written = service.addMany.mock.calls[0][0];
+      expect(written).toHaveLength(2);
+      expect(written.map((e: WeekEntry) => e.workoutName)).toEqual([
+        'Bench Press',
+        'Dips',
+      ]);
+      expect(written.every((e: WeekEntry) => e.day === 3)).toBe(true);
+      expect(view.showSetPicker()).toBe(false);
+    });
+
+    it('reports how many were added', async () => {
+      view.openAddChoice(0);
+      await view.applySet(pushDay());
+
+      expect(toast.show).toHaveBeenCalledWith(
+        'Added 2 exercises from Push Day.',
+        'success'
+      );
+    });
+
+    it('skips what that day already has, and says which', async () => {
+      entriesData = [
+        {
+          id: 'e1',
+          day: 0,
+          workoutId: 'w1',
+          workoutName: 'Bench Press',
+          muscleGroup: 'Chest',
+          sets: [{ reps: 10, weight: 135 }],
+        },
+      ];
+      view.openAddChoice(0);
+
+      await view.applySet(pushDay());
+
+      const written = service.addMany.mock.calls[0][0];
+      expect(written.map((e: WeekEntry) => e.workoutName)).toEqual(['Dips']);
+      expect(toast.show).toHaveBeenCalledWith(
+        'Added 1 exercise from Push Day. Bench Press was already logged.',
+        'success'
+      );
+    });
+
+    it('writes nothing and explains when the whole set is already logged', async () => {
+      entriesData = pushDay().items.map((item, i) => ({
+        id: `e${i}`,
+        day: 0,
+        workoutId: item.workoutId,
+        workoutName: item.workoutName,
+        muscleGroup: item.muscleGroup,
+        sets: [],
+      }));
+      view.openAddChoice(0);
+
+      await view.applySet(pushDay());
+
+      expect(service.addMany).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith(
+        'Everything in Push Day is already logged on Mon.',
+        'error'
+      );
+    });
+
+    it('fills a body-weight exercise from the latest weigh-in, not the set', async () => {
+      const set: WorkoutSet = {
+        id: 's2',
+        name: 'Pull Day',
+        description: '',
+        items: [
+          {
+            workoutId: 'w4',
+            workoutName: 'Pull-ups',
+            muscleGroup: 'Back',
+            bodyWeight: true,
+            notes: '',
+            trackTime: false,
+            sets: [{ reps: 10, weight: null, time: null }],
+          },
+        ],
+      };
+      view.openAddChoice(0);
+
+      await view.applySet(set);
+
+      const written = service.addMany.mock.calls[0][0];
+      expect(written[0].sets).toEqual([{ reps: 10, weight: 176.4, time: null }]);
+    });
+
+    it('never writes back to the exercise library', async () => {
+      view.openAddChoice(0);
+      await view.applySet(pushDay());
+
+      // The set's uniform 135 differs from SAMPLE_WORKOUT's usualWeight of 60,
+      // which a hand-logged entry would sync — a template must not.
+      expect(workoutService.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the picker open and says so when the write fails', async () => {
+      service.addMany.mockRejectedValueOnce(new Error('offline'));
+      view.openAddChoice(0);
+      view.choose('set');
+
+      await view.applySet(pushDay());
+
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not add that set. Please try again.',
+        'error'
+      );
+      expect(view.showSetPicker()).toBe(true);
+    });
+
+    it('lists a set’s exercises so the picker can be read at a glance', () => {
+      expect(view.itemNames(pushDay())).toBe('Bench Press · Dips');
+    });
+  });
+
+  describe('saving a day as a set', () => {
+    beforeEach(() => {
+      entriesData = [
+        {
+          id: 'e1',
+          day: 1,
+          workoutId: 'w1',
+          workoutName: 'Bench Press',
+          muscleGroup: 'Chest',
+          notes: 'felt good',
+          sets: [{ reps: 10, weight: 135 }],
+        },
+        {
+          id: 'e2',
+          day: 1,
+          workoutId: 'w4',
+          workoutName: 'Pull-ups',
+          muscleGroup: 'Back',
+          sets: [{ reps: 10, weight: 176.4 }],
+        },
+      ];
+    });
+
+    it('opens the builder pre-filled from that day, with a suggested name', () => {
+      view.onSaveDayAsSet(1);
+
+      expect(view.showSaveDay()).toBe(true);
+      expect(view.saveDayName()).toBe('Tue session');
+      expect(view.saveDayItems().map((i) => i.workoutName)).toEqual([
+        'Bench Press',
+        'Pull-ups',
+      ]);
+    });
+
+    it('carries each entry’s notes and sets across', () => {
+      view.onSaveDayAsSet(1);
+
+      const [bench] = view.saveDayItems();
+      expect(bench.notes).toBe('felt good');
+      expect(bench.sets).toEqual([{ reps: 10, weight: 135 }]);
+    });
+
+    it('captures a body-weight exercise without a weight', () => {
+      view.onSaveDayAsSet(1);
+
+      const pullups = view.saveDayItems()[1];
+      expect(pullups.bodyWeight).toBe(true);
+      expect(pullups.sets).toEqual([{ reps: 10, weight: null }]);
+    });
+
+    it('does nothing for a day with nothing logged', () => {
+      view.onSaveDayAsSet(5);
+
+      expect(view.showSaveDay()).toBe(false);
+    });
   });
 });

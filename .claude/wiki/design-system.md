@@ -47,11 +47,28 @@ as component-scoped styles:
   `.btn-google` / `.btn-ghost`; `.btn-full` for 100%-width. Disabled state is
   handled by the `.btn:disabled` selector, not a separate class.
 - **Cards**: `.glass-card` — the frosted-glass card look (`backdrop-filter:
-  blur`) used for the dashboard welcome card, list rows, empty states, etc.
+  blur`) used for the dashboard greeting bar, list rows, empty states, etc.
+- **Card header link**: `.card-link` — a quiet "Details →" text link for an
+  `app-analytics-card`'s `actions` slot. Used by the Dashboard's summary cards
+  (compact burndown/totals, Today, What's new) to point at the full page
+  without button chrome.
 - **Forms**: `.form-group` / `.form-label` / `.form-input` / `.form-error` /
-  `.form-row` (two fields side by side). **`.form-hint` is *not* global** despite
-  looking like it — it's duplicated locally in `pages/weights/weights.css` and
-  `pages/weeks/weeks.css`. Promote it to `styles.css` if a third page needs it.
+  `.form-row` (two fields side by side) / `.form-hint` (the small muted line
+  under a field). `.form-hint` used to be duplicated per page; it went global
+  once a third caller (the create-workout modal) needed it. `pages/weights/`
+  still defines its own — a deliberate variant with a negative `margin-top`,
+  and component-scoped styles out-specify the global rule, so it wins there.
+  `.form-textarea` is a **companion, not an alternative**, to `.form-input`:
+  put both on a `<textarea>` so the border/padding/focus chrome stays defined
+  once and only the multi-line bits (`min-height`, `line-height`,
+  `resize: vertical`) live separately. Callers: the workout-note field in the
+  Weeks logging modal, and the description/note fields in the set builder.
+- **In-modal form extras**: `.modal-toggle-label` (the label beside a
+  `.theme-switch` toggle inside a modal form) and `.create-workout-link` (the
+  plain-text "+ Create new workout" button under a muscle-group select). Both
+  started scoped to `pages/weeks/`; they went global when the set builder
+  needed the same two pieces — the same promotion `.form-hint` got, for the
+  same reason.
 - **Page shell**: `.page` (max-width wrapper) / `.page-title` /
   `.page-subtitle` — every routed page (except auth pages, which use
   `AuthLayoutComponent` instead) opens with `<section class="page">`.
@@ -61,11 +78,23 @@ as component-scoped styles:
   / `.list-delete` (hover states), `.list-empty`, `.list-loading`. This is
   the single biggest reusable block — a new list-shaped page should compose
   these rather than inventing new class names.
-- **Modals**: `.modal-overlay` / `.modal-content` / `.modal-header` /
-  `.modal-close` — used by `ModalComponent` and also hand-rolled once
-  (Login's password-reset modal doesn't use `ModalComponent`, it duplicates
-  the same classes inline — worth reusing `ModalComponent` there if that
-  code is touched again).
+- **Modals**: `.modal-overlay` / `.modal-content` / `.modal-shell` /
+  `.modal-body` / `.modal-wide` / `.modal-header` / `.modal-close` — used by
+  `ModalComponent` and also hand-rolled once (Login's password-reset modal
+  doesn't use `ModalComponent`, it duplicates the same classes inline — worth
+  reusing `ModalComponent` there if that code is touched again).
+  - `.modal-content` is capped at `100dvh - 3rem` and scrolls. Without that
+    cap a tall modal spills off both ends of the fixed overlay with no way to
+    reach what's cut off — every modal had this latent until the set builder
+    grew tall enough to hit it.
+  - `ModalComponent` adds `.modal-shell` (which doesn't scroll) and puts the
+    projected content in a `.modal-body` that does, so the ✕ and the heading
+    stay pinned. Hand-rolled modals get only the `.modal-content` cap and
+    scroll as a whole. Nothing inside a modal may rely on escaping its bounds
+    with `position: absolute` — the shell clips.
+  - `.modal-wide` (`ModalComponent`'s `wide` input) widens to
+    `min(1500px, 95vw)` **from 900px up only**; below that every modal keeps
+    the standard 420px single-column size. Only the set builder opts in.
 - **Settings rows**: `.setting-item` / `.setting-label` / `.setting-icon` /
   `.theme-switch` / `.switch-knob` — shared between the Settings page and
   `ThemeToggleComponent`.

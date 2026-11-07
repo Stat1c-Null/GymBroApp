@@ -56,7 +56,82 @@ export interface Workout {
   muscleGroup: MuscleGroup;
   usualWeight: number | null;
   maxWeight: number | null;
+  /**
+   * Whether this exercise is loaded by the user's own body weight (pull-ups,
+   * dips, push-ups). Optional: workouts saved before this field existed simply
+   * lack it, which reads the same as `false` — no migration needed.
+   *
+   * It *replaces* the usual/max weight inputs rather than adding to them. There
+   * is no per-workout weight to store, because logging one auto-fills every
+   * set's weight from the latest weigh-in in `users/{uid}/weights` and makes the
+   * field read-only — see `WeeksComponent.weightSeedFor` in `pages/weeks/weeks.ts`.
+   * `usualWeight`/`maxWeight` are therefore always saved as `null` here, the same
+   * way {@link CARDIO_GROUP} workouts do.
+   */
+  bodyWeight?: boolean;
+  /**
+   * The exercise's **standing note** — carried into the next session of it,
+   * however many weeks later that is. Picking this exercise in the log modal
+   * seeds the note field from here; saving with the note toggle off clears it.
+   *
+   * This is the note's *live* home, not its archive. Every logged session keeps
+   * its own copy in {@link WeekEntry.notes}, so clearing this can never reach
+   * backwards and erase what a past session said — see
+   * `.claude/wiki/database.md` → Workout notes.
+   *
+   * Optional: exercises saved before this field existed simply lack it, which
+   * reads the same as '' — no migration, same as {@link Workout.bodyWeight}.
+   */
+  note?: string;
+  /**
+   * The local `YYYY-MM-DD` the note was **first** written, held across every
+   * later revision — "I've been working around this shoulder since June" is the
+   * fact worth keeping, and a date that reset on every edit couldn't say it.
+   *
+   * It is the logical date of the *session the note was written on*, not the
+   * day it was typed, so annotating a past week dates the note to that week.
+   */
+  noteCreatedAt?: string;
   createdAt?: unknown; // Firestore serverTimestamp
+}
+
+/**
+ * The muscle groups a form should offer when picking an exercise to log or to
+ * plan: the reserved {@link CARDIO_GROUP} always first, then the user's own
+ * groups, then {@link UNASSIGNED_GROUP} — but only when the library actually
+ * holds an orphan, so the bucket doesn't advertise itself to users who have
+ * never deleted a group.
+ *
+ * Shared by the Weeks logging modal and the set builder. Note this is *not*
+ * the same list `WorkoutFormModalComponent` offers: creating a workout can
+ * always target Unassigned, whereas choosing one only reaches it if something
+ * is in there.
+ */
+export function loggableGroups(
+  groups: readonly string[],
+  workouts: readonly Workout[]
+): string[] {
+  const known = new Set(groups);
+  const list = [CARDIO_GROUP, ...groups];
+  const hasOrphans = workouts.some((w) => isOrphanGroup(w.muscleGroup, known));
+  return hasOrphans ? [...list, UNASSIGNED_GROUP] : list;
+}
+
+/**
+ * The exercises in `group`, as the pickers filter them. Selecting the reserved
+ * {@link UNASSIGNED_GROUP} matches anything whose group has left the user's
+ * list, mirroring how the Workouts page buckets them.
+ */
+export function workoutsInGroup(
+  workouts: readonly Workout[],
+  group: string,
+  knownGroups: readonly string[]
+): Workout[] {
+  if (group === UNASSIGNED_GROUP) {
+    const known = new Set(knownGroups);
+    return workouts.filter((w) => isOrphanGroup(w.muscleGroup, known));
+  }
+  return workouts.filter((w) => w.muscleGroup === group);
 }
 
 @Injectable({ providedIn: 'root' })
@@ -101,6 +176,30 @@ export class WorkoutService {
     const uid = this.auth.requireUid('edit a workout');
     await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
       ...data,
+    });
+  }
+
+  /**
+   * Set — or clear — the exercise's standing note, touching nothing else on the
+   * document.
+   *
+   * Deliberately **not** routed through {@link update}, which takes a whole
+   * workout. This runs straight after the Weeks page may have written a new
+   * `usualWeight`, and a full-document write built from the caller's copy of the
+   * workout would revert it. `stageGroupReassign` writes one field the same way.
+   *
+   * Clearing writes `''` rather than deleting the fields: `updateDoc` ignores a
+   * key that isn't in the payload, so an omission could never clear a note.
+   */
+  async setNote(
+    id: string,
+    note: string,
+    noteCreatedAt: string
+  ): Promise<void> {
+    const uid = this.auth.requireUid('save a workout note');
+    await updateDoc(doc(this.firestore, 'users', uid, 'workouts', id), {
+      note,
+      noteCreatedAt,
     });
   }
 

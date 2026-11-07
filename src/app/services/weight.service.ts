@@ -23,7 +23,7 @@ export type WeightUnit = 'kg' | 'lbs';
 /**
  * The unit lifted weights are *stored* in.
  *
- * `Workout.usualWeight`, `Workout.maxWeight` and `WorkoutSet.weight` are plain
+ * `Workout.usualWeight`, `Workout.maxWeight` and `LoggedSet.weight` are plain
  * numbers carrying no unit tag, and every version of the app has written and
  * labelled them as pounds — so pounds is their canonical unit by definition.
  * A kg/lbs preference is therefore a display-and-input concern only: convert at

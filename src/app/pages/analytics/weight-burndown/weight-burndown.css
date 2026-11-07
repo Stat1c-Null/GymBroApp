@@ -1,3 +1,8 @@
+/* Grow to the height the Dashboard row gives this component. */
+app-analytics-card {
+  flex: 1;
+}
+
 .banner {
   margin-bottom: 1rem;
 }
@@ -18,6 +23,12 @@
   .stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Compact (Dashboard) shows three tiles — always one row of three, since the
+   card sits in a half-width column where the viewport breakpoint above lies. */
+.stats.stats-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .stats-cta {

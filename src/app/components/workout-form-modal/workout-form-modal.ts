@@ -5,6 +5,7 @@ import { WorkoutService, Workout, UNASSIGNED_GROUP, CARDIO_GROUP } from '../../s
 import { displayLifted, liftedToCanonical } from '../../services/weight.service';
 import { SettingsService } from '../../services/settings.service';
 import { ModalComponent } from '../modal/modal';
+import { BodyWeightPromptComponent } from '../body-weight-prompt/body-weight-prompt';
 
 /**
  * Shared create/edit-workout modal. Owns the whole form (name, muscle group,
@@ -18,7 +19,7 @@ import { ModalComponent } from '../modal/modal';
 @Component({
   selector: 'app-workout-form-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent],
+  imports: [FormsModule, ModalComponent, BodyWeightPromptComponent],
   templateUrl: './workout-form-modal.html',
 })
 export class WorkoutFormModalComponent {
@@ -48,6 +49,13 @@ export class WorkoutFormModalComponent {
 
   protected name = '';
   protected muscleGroup = '';
+  /**
+   * Body-weight exercise: its load is whatever the user weighs, so it has no
+   * usual/max weight of its own. The template swaps those two inputs for a
+   * toggle, and logging one auto-fills each set's weight from the latest
+   * weigh-in — see {@link Workout.bodyWeight}.
+   */
+  protected bodyWeight = false;
   /** Shown in the user's unit; converted back to canonical lbs on submit. */
   protected usualWeight: number | null = null;
   protected maxWeight: number | null = null;
@@ -80,6 +88,7 @@ export class WorkoutFormModalComponent {
     this.muscleGroup =
       w?.muscleGroup ?? this.presetGroup() ?? this.muscleGroupsForForm()[0] ?? '';
     const unit = this.settings.unit();
+    this.bodyWeight = w?.bodyWeight ?? false;
     this.canonical = { usual: w?.usualWeight ?? null, max: w?.maxWeight ?? null };
     this.usualWeight = displayLifted(this.canonical.usual, unit);
     this.maxWeight = displayLifted(this.canonical.max, unit);
@@ -96,19 +105,20 @@ export class WorkoutFormModalComponent {
     this.saving.set(true);
     this.error.set('');
 
+    // Neither Cardio exercises nor body-weight exercises carry a usual/max
+    // lifted weight — the form hides those inputs in both cases, so ignore
+    // whatever's left in them. See `Workout.bodyWeight`.
+    const tracksLiftedWeight = this.muscleGroup !== CARDIO_GROUP && !this.bodyWeight;
     const data = {
       name: this.name.trim(),
       muscleGroup: this.muscleGroup,
-      // Cardio exercises don't collect a usual/max lifted weight — the form
-      // hides those inputs for this group, so ignore whatever's left in them.
-      usualWeight:
-        this.muscleGroup === CARDIO_GROUP
-          ? null
-          : this.toCanonical(this.usualWeight, this.seeded.usual, this.canonical.usual),
-      maxWeight:
-        this.muscleGroup === CARDIO_GROUP
-          ? null
-          : this.toCanonical(this.maxWeight, this.seeded.max, this.canonical.max),
+      bodyWeight: this.muscleGroup === CARDIO_GROUP ? false : this.bodyWeight,
+      usualWeight: tracksLiftedWeight
+        ? this.toCanonical(this.usualWeight, this.seeded.usual, this.canonical.usual)
+        : null,
+      maxWeight: tracksLiftedWeight
+        ? this.toCanonical(this.maxWeight, this.seeded.max, this.canonical.max)
+        : null,
     };
     const id = this.editingWorkout()?.id ?? null;
 

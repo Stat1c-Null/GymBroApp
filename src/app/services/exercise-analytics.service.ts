@@ -10,9 +10,16 @@ import {
 import { of, switchMap } from 'rxjs';
 import { startOfLocalDay } from '../analytics/time-series';
 import { ExerciseSession } from '../analytics/exercise-metrics';
+import { TotalsEntry } from '../analytics/totals';
 import { AuthService } from './auth.service';
 import { SettingsService } from './settings.service';
-import { UNASSIGNED_GROUP, Workout, WorkoutService, isOrphanGroup } from './workout.service';
+import {
+  CARDIO_GROUP,
+  UNASSIGNED_GROUP,
+  Workout,
+  WorkoutService,
+  isOrphanGroup,
+} from './workout.service';
 import { WeekEntry, parseDateId } from './week.service';
 import { toDate } from './firestore-utils';
 
@@ -90,6 +97,56 @@ export class ExerciseAnalyticsService {
       const x = this.entryX(e);
       if (x == null) continue;
       out.push({ workoutId: e.workoutId, label: e.workoutName, x, sets: e.sets ?? [] });
+    }
+    return out.sort((a, b) => a.x - b.x);
+  }
+
+  /**
+   * Every logged entry flattened for totalling, ascending by date.
+   *
+   * Two things separate this from {@link sessionsFor}, and both are why totals
+   * couldn't be built on that: it takes **no id list** (totals are about
+   * everything), and it **keeps `cardio` and `muscleGroup`**, which that method
+   * drops. Without the first there'd be no total tonnage, without the second no
+   * total miles.
+   *
+   * Cardio-ness is decided here rather than in `analytics/totals.ts`: it is the
+   * same `muscleGroup === CARDIO_GROUP && entry.cardio` predicate `entrySummary`
+   * uses, and resolving it at this boundary keeps the pure module free of a
+   * constant that lives in a Firestore-importing service.
+   *
+   * Entries without a resolvable date are dropped, as in `sessionsFor`.
+   *
+   * An entry stores the exercise name and muscle group *as they were when it was
+   * logged*. Totals must follow the library instead: after renaming the group
+   * "Chest" to "Pecs", every Chest session belongs in the Pecs row, not a second
+   * stale row. So the label and group come from the exercise's current library
+   * record when it still exists, and a group that is no longer in the user's
+   * list folds into {@link UNASSIGNED_GROUP} — the same rule
+   * {@link exercisesInGroup} and the rest of the app apply.
+   */
+  totalsEntries(): TotalsEntry[] {
+    const library = new Map<string, Workout>();
+    for (const w of this.workouts.workouts() ?? []) {
+      if (w.id) library.set(w.id, w);
+    }
+    const known = new Set(this.groups());
+
+    const out: TotalsEntry[] = [];
+    for (const e of this.entries() ?? []) {
+      const x = this.entryX(e);
+      if (x == null) continue;
+      const isCardio = e.muscleGroup === CARDIO_GROUP && e.cardio != null;
+      const current = library.get(e.workoutId);
+      const group = current?.muscleGroup ?? e.muscleGroup;
+      out.push({
+        x,
+        workoutId: e.workoutId,
+        label: current?.name ?? e.workoutName,
+        muscleGroup: isOrphanGroup(group, known) ? UNASSIGNED_GROUP : group,
+        sets: isCardio ? [] : e.sets ?? [],
+        cardio: isCardio ? e.cardio : null,
+      });
     }
     return out.sort((a, b) => a.x - b.x);
   }

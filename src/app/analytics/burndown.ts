@@ -157,7 +157,9 @@ export function computeBurndown(
   const goalReached = current != null && remaining <= 0;
 
   const totalSpan = Math.abs(target - start);
-  const done = current == null ? 0 : Math.abs(current - start);
+  // Signed like `remaining`: movement *away* from the target is negative and
+  // clamps to 0 — gaining 10 lbs on a cut is not 50% of the way there.
+  const done = current == null ? 0 : (current - start) * sign;
   const progress = totalSpan === 0 ? (goalReached ? 1 : 0) : clamp01(done / totalSpan);
 
   const reg = linearRegression(trend.length >= 2 ? trend : points);

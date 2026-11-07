@@ -168,7 +168,7 @@ export class MuscleProgressComponent {
 
   protected readonly consistencyText = computed(() => {
     const f = this.frequency();
-    return `${f.weeksTrained} / ${f.weeksInRange}`;
+    return `${f.weeksTrained} / ${f.weeksSpanned}`;
   });
 
   /** Best value of the active metric across the selection, in range. */

@@ -66,6 +66,25 @@
   height: 30px;
 }
 
+.day-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+/* "Save this day as a set" — secondary to the "+" beside it, so it sits back
+   until the column is hovered rather than competing for attention. */
+.day-save {
+  width: 28px;
+  height: 28px;
+  opacity: 0.55;
+}
+
+.day-column:hover .day-save,
+.day-save:focus-visible {
+  opacity: 1;
+}
+
 .day-entries {
   flex: 1;
   min-height: 0;
@@ -110,6 +129,32 @@
   color: var(--text-secondary);
 }
 
+/* The logged note, one step quieter than the sets line above it. Clamped so a
+   chatty note can't bury the other workouts in a 180px-wide day column — the
+   full text is on the title attribute, and always in the edit modal. */
+.day-entry-notes {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: pre-wrap; /* keep the line breaks the user typed */
+  overflow-wrap: anywhere; /* a long unbroken token can't blow out the column */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+/* When a note was first written, for one carried in from an earlier session.
+   Its own line rather than a suffix inside .day-entry-notes, which is clamped —
+   a three-line note would otherwise clip the date off the end. */
+.day-entry-note-origin {
+  font-size: 0.68rem;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
 .day-empty {
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -150,6 +195,20 @@
 
 :host(.compact) .day-entry {
   padding: 0.45rem 0.55rem;
+}
+
+/* One line tighter than the page grid: the compact strip is a fixed 15rem tall,
+   so a note has less room to spend before it pushes entries out of view. */
+:host(.compact) .day-entry-notes {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* Dropped entirely in the strip. At a fixed 15rem, a line spent on a note's
+   provenance is a line not spent on the workouts themselves; the full grid
+   still shows it. */
+:host(.compact) .day-entry-note-origin {
+  display: none;
 }
 
 :host(.compact) .list-loading {

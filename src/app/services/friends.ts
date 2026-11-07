@@ -28,17 +28,27 @@ export interface Friendship {
 /**
  * The searchable directory entry for a user (`userProfiles/{uid}`).
  *
- * `emailLower` exists purely so someone who knows the exact address can find its
- * owner — it is **never rendered**. Search results and the friend list show
- * `displayName` only.
+ * Every signed-in user can read every profile, so a profile carries nothing that
+ * isn't safe to show everyone — in particular **no email address**. Finding
+ * someone by exact email goes through `emailIndex/{email}` instead, which can be
+ * fetched by address but never listed (see `firestore.rules`).
  */
 export interface UserProfile {
   uid: string;
   displayName: string;
   displayNameLower: string;
-  emailLower: string;
   createdAt?: unknown;
   updatedAt?: unknown;
+}
+
+/**
+ * The `emailIndex` document id for an address: trimmed and lowercased, matching
+ * the security rule's `request.auth.token.email.lower()`. `null` for an address
+ * that can't be a document id (empty, or containing `/`, a path separator).
+ */
+export function emailIndexId(email: string | null | undefined): string | null {
+  const id = (email ?? '').trim().toLowerCase();
+  return id && !id.includes('/') ? id : null;
 }
 
 /**

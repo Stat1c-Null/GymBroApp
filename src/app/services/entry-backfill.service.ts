@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, getDocs, writeBatch } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { toDate } from './firestore-utils';
+import { SettingsService } from './settings.service';
 import { WeightService } from './weight.service';
 import { WorkoutService } from './workout.service';
 import { WeekEntry, entryDate, mondayOf, toWeekId } from './week.service';
@@ -43,6 +44,50 @@ export class EntryBackfillService {
   private readonly auth = inject(AuthService);
   private readonly workouts = inject(WorkoutService);
   private readonly weights = inject(WeightService);
+  private readonly settings = inject(SettingsService);
+
+  /** Guards against launching the automatic back-fill more than once per session.
+   *  Lives here rather than on a page so two pages that both show analytics
+   *  (Analytics and Dashboard) can't each start a pass. */
+  private autoRunStarted = false;
+
+  /**
+   * Run the back-fill once, after the data its scan window is derived from has
+   * loaded and only if it hasn't already completed.
+   *
+   * **Call it from an `effect`** on any page that renders exercise analytics: it
+   * reads the signals it waits on, so the effect re-runs until they've loaded.
+   * Idempotent, so the rare case where it fires before the persisted flag has
+   * loaded just does a cheap no-op pass.
+   */
+  ensureBackfilled(): void {
+    const workouts = this.workouts.workouts();
+    const weights = this.weights.weights();
+    if (workouts === undefined || weights === undefined) return;
+    if (this.autoRunStarted || this.settings.entriesBackfilledAt() != null) return;
+
+    this.autoRunStarted = true;
+    // No exercises means no logged entries to migrate — just record it as done.
+    if (workouts.length === 0) {
+      void this.settings.markEntriesBackfilled();
+      return;
+    }
+    void this.autoRun();
+  }
+
+  private async autoRun(): Promise<void> {
+    try {
+      const { stamped, skipped } = await this.backfillEntries();
+      await this.settings.markEntriesBackfilled();
+      console.info(
+        `[analytics] entry back-fill complete: stamped ${stamped}, skipped ${skipped}`
+      );
+    } catch (err) {
+      // Leave the flag unset so a later visit retries — the migration is idempotent.
+      this.autoRunStarted = false;
+      console.error('[analytics] entry back-fill failed', err);
+    }
+  }
 
   async backfillEntries(): Promise<BackfillResult> {
     const uid = this.auth.requireUid('back-fill your analytics data');

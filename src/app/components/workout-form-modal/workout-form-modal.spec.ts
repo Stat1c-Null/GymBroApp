@@ -4,11 +4,13 @@ import { WorkoutFormModalComponent } from './workout-form-modal';
 import { WorkoutService, Workout, MUSCLE_GROUPS, CARDIO_GROUP } from '../../services/workout.service';
 import { ToastService } from '../../services/toast.service';
 import { SettingsService } from '../../services/settings.service';
+import { WeightService } from '../../services/weight.service';
 
 /** Typed window onto WorkoutFormModalComponent's `protected` form members. */
 interface FormView {
   name: string;
   muscleGroup: string;
+  bodyWeight: boolean;
   usualWeight: number | null;
   maxWeight: number | null;
   onSubmit: () => Promise<void>;
@@ -43,6 +45,9 @@ describe('WorkoutFormModalComponent', () => {
       providers: [
         { provide: WorkoutService, useValue: service },
         { provide: ToastService, useValue: toast },
+        // The body-weight branch of the form renders BodyWeightPromptComponent,
+        // which reads the weight log.
+        { provide: WeightService, useValue: { weights: () => [], add: vi.fn() } },
         {
           provide: SettingsService,
           useValue: { muscleGroups: () => [...MUSCLE_GROUPS], unit: () => 'lbs' },
@@ -78,6 +83,7 @@ describe('WorkoutFormModalComponent', () => {
     expect(service.add).toHaveBeenCalledWith({
       name: 'Bench Press',
       muscleGroup: 'Chest',
+      bodyWeight: false,
       usualWeight: 60,
       maxWeight: 80,
     });
@@ -85,6 +91,7 @@ describe('WorkoutFormModalComponent', () => {
       id: 'new-id',
       name: 'Bench Press',
       muscleGroup: 'Chest',
+      bodyWeight: false,
       usualWeight: 60,
       maxWeight: 80,
     });
@@ -112,6 +119,7 @@ describe('WorkoutFormModalComponent', () => {
     expect(service.update).toHaveBeenCalledWith('abc123', {
       name: 'Squat',
       muscleGroup: 'Legs',
+      bodyWeight: false,
       usualWeight: 90,
       maxWeight: 140,
     });
@@ -144,8 +152,77 @@ describe('WorkoutFormModalComponent', () => {
     expect(service.add).toHaveBeenCalledWith({
       name: 'Morning Run',
       muscleGroup: CARDIO_GROUP,
+      bodyWeight: false,
       usualWeight: null,
       maxWeight: null,
     });
+  });
+
+  it('stores null usual/max weight for a body-weight exercise', async () => {
+    open();
+    view.name = 'Pull-ups';
+    view.muscleGroup = 'Back';
+    view.usualWeight = 60; // typed before the toggle went on; must not be saved
+    view.maxWeight = 80;
+    view.bodyWeight = true;
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith({
+      name: 'Pull-ups',
+      muscleGroup: 'Back',
+      bodyWeight: true,
+      usualWeight: null,
+      maxWeight: null,
+    });
+  });
+
+  it('seeds the body-weight toggle from the workout being edited', () => {
+    open({
+      id: 'bw1',
+      name: 'Dips',
+      muscleGroup: 'Chest',
+      usualWeight: null,
+      maxWeight: null,
+      bodyWeight: true,
+    });
+
+    expect(view.bodyWeight).toBe(true);
+  });
+
+  it('restores the usual/max weight when the body-weight toggle is turned off', async () => {
+    open({
+      id: 'bw1',
+      name: 'Dips',
+      muscleGroup: 'Chest',
+      usualWeight: null,
+      maxWeight: null,
+      bodyWeight: true,
+    });
+
+    view.bodyWeight = false;
+    view.usualWeight = 45;
+    await view.onSubmit();
+
+    expect(service.update).toHaveBeenCalledWith('bw1', {
+      name: 'Dips',
+      muscleGroup: 'Chest',
+      bodyWeight: false,
+      usualWeight: 45,
+      maxWeight: null,
+    });
+  });
+
+  it('leaves the body-weight flag off for a Cardio workout even if it was toggled on', async () => {
+    open();
+    view.name = 'Morning Run';
+    view.bodyWeight = true; // toggled before switching the group to Cardio
+    view.muscleGroup = CARDIO_GROUP;
+
+    await view.onSubmit();
+
+    expect(service.add).toHaveBeenCalledWith(
+      expect.objectContaining({ bodyWeight: false })
+    );
   });
 });
