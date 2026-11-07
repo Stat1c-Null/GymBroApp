@@ -43,5 +43,19 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 
-# Nudox local index state (never commit: contains authority.secret)
+# ===== Секреты =====
+.env
+*.env
+
+# ===== Тестовый мусор =====
+body.json
+firebase-service-account.json
+
+# ===== Java =====
+target/
+*.class
+*.jar
+*.war
+
+# ===== Nudox / Backend state =====
 .backend/

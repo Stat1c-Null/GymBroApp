@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: gymbro-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/gymbro}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/master.yml
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+
+app:
+  jwt:
+    # Override in production! 32+ bytes, base64 or plain text.
+    secret: ${JWT_SECRET:gymbro-dev-secret-change-me-please-0123456789abcdef}
+    ttl: PT12H
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:4200,http://127.0.0.1:4200}
+
+logging:
+  level:
+    com.gymbro.backend: INFO
+  pattern:
+    # Every line carries the request's trace id (see TraceIdFilter).
+    level: "%5p [%X{traceId:-no-trace}]"
